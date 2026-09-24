@@ -49,7 +49,7 @@ drill_report  task=issue296            # tulis .drill/issue296/report.md
 4. **Jangan lapor siap semasa gate terbuka.** Panggil `drill_gate`; kalau `ready=false`, sebut gate mana yang tinggal, jangan ganti dengan ayat "should work".
 5. **Review 2 dalam sesi segar, ikut role file.** Auditor tak boleh jadi penulis kod. `drill_review` baca role `drill-auditor` (project `.dsh/roles` → `~/.dsh/roles` → bundled), jadi persona, tool policy (read-only) dan budget datang dari fail, bukan dari ingatan.
 6. **Satu issue satu PR.** Badan PR: defect + fix + cara uji + bukti regresi. `Fixes #<n>`. Nombor issue tak muncul dalam kod atau mesej commit.
-7. **Fallback teks dilabel, bukan diganti.** Kalau c2g tak jawab, `drill_locate`/`drill_blast` guna tgrep (`auto` pilih dia kalau ada `.tgrep/`) atau rg, dan tulis `text-level` dalam rekod — itu *occurrence*, bukan call site. Jangan dakwa "caller" dari hasil teks.
+7. **Fallback dilabel ikut lapisan.** Kalau cache c2g per-worktree tiada, plugin guna **merged store `~/Embed/c2g/graph_index.sqlite`** — itu graf sebenar (link resolved), tapi **snapshot**, bukan HEAD worktree kau; rekod bawa masa build dia. Lepas tu baru tgrep/rg: itu *occurrence*, bukan call site — jangan dakwa "caller" dari hasil teks.
 8. **Env repo dihormati.** Guna `~/scripts/nodedb-cargo.sh <worktree> …` (target per-worktree, sccache, `RUST_MIN_STACK`), bukan `cargo` kosong.
 
 ## Bentuk laporan

@@ -27,6 +27,18 @@ import { branchName, diffFiles, headSha } from './lib/git.js'
 import { resolveRole, roleBudget, roleToolFilter } from './lib/role.js'
 import { DEFAULT_INDEX_DIR, definitionPattern, indexFor, indexRoot, indexesSize, legacyIndexDir, pruneIndexes, resolveBin, resolveEngine, searchText } from './lib/search.js'
 import { cacheRoot, drop, readCache, sizeOf } from './lib/cache.js'
+import {
+  DEFAULT_EMBED_STORE,
+  callers as embedCallers,
+  callees as embedCallees,
+  dependentFiles as embedDependentFiles,
+  displayPath as embedDisplayPath,
+  impact as embedImpact,
+  isUsable as embedUsable,
+  locate as embedLocate,
+  openStore as openEmbedStore,
+  storeLabel as embedStoreLabel,
+} from './lib/embed.js'
 
 export const name = 'dsh-drill'
 export const inject = ['tools']
@@ -53,6 +65,9 @@ export const Config = z.object({
   autoIndex: z.boolean().default(false),
   cacheDir: z.string().default(''),
   cacheTtlDays: z.number().min(0).step(1).default(7),
+  embedEnabled: z.boolean().default(true),
+  embedStore: z.string().default(''),
+  embedRepoMap: z.string().default(''),
   rgBin: z.string().default('rg'),
   tgrepBin: z.string().default('tgrep'),
   searchMaxHits: z.number().min(1).step(1).default(200),
@@ -117,6 +132,37 @@ function cacheTtlMs(config) {
 function indexBase(config) {
   if (config.tgrepIndexDir && config.tgrepIndexDir.length > 0) return config.tgrepIndexDir
   return config.cacheDir && config.cacheDir.length > 0 ? join(config.cacheDir, 'tgrep') : DEFAULT_INDEX_DIR
+}
+
+/**
+ * Open the merged c2g store (`~/Embed/c2g/graph_index.sqlite`) when enabled.
+ *
+ * It answers for every worktree of a repository, which covers the case the
+ * per-project CLI cache leaves open; it is a snapshot, so its build time is
+ * carried into the evidence.
+ */
+function embedStoreFor(config) {
+  if (!config.embedEnabled) return null
+  const path = config.embedStore && config.embedStore.length > 0 ? config.embedStore : DEFAULT_EMBED_STORE
+  try {
+    const store = openEmbedStore(path)
+    if (store === null || !embedUsable(store.path, config.sqliteBin)) return null
+    return store
+  } catch {
+    return null
+  }
+}
+
+/** Shard -> directory overrides parsed from `shard=dir,shard=dir`. */
+function embedOverrides(config) {
+  const raw = config.embedRepoMap
+  if (raw === undefined || raw.length === 0) return {}
+  const overrides = {}
+  for (const pair of raw.split(',')) {
+    const [shard, dir] = pair.split('=')
+    if (shard !== undefined && dir !== undefined && shard.trim() !== '' && dir.trim() !== '') overrides[shard.trim()] = dir.trim()
+  }
+  return overrides
 }
 
 /**
@@ -252,11 +298,14 @@ export function apply(ctx, config) {
       const repoRoot = args.repo !== undefined ? resolve(cwd, args.repo) : cwd
       const c2gReady = c2gDb(repoRoot, config) !== null
       const tgrepReady = indexFor(repoRoot, indexBase(config)) !== null
+      const store = embedStoreFor(config)
       const coverage = c2gReady
         ? 'stage 1–2: c2g cache covers this repo'
-        : tgrepReady
-          ? 'stage 1–2: no c2g cache, tgrep index ready (text-level)'
-          : 'stage 1–2: no c2g cache and no tgrep index — run drill_index to build one, otherwise searches scan with rg'
+        : store !== null
+          ? `stage 1–2: no per-worktree c2g cache, merged c2g store available (${embedStoreLabel(store)})${tgrepReady ? '; tgrep index ready' : ''}`
+          : tgrepReady
+            ? 'stage 1–2: no c2g cache, tgrep index ready (text-level)'
+            : 'stage 1–2: no c2g cache and no tgrep index — run drill_index to build one, otherwise searches scan with rg'
       return { task: args.task, dir: paths.dir, gates: summary.gates, next: `${summary.next} · ${coverage}` }
     },
   })
@@ -303,6 +352,31 @@ export function apply(ctx, config) {
       }
       if (db === null && !(typeof args.symbol === 'string' && args.symbol.length > 0) && !(typeof args.file === 'string' && Number.isInteger(args.line))) {
         throw new Error('drill: pass `symbol`, or `file` plus `line`')
+      }
+
+      // Merged-store fallback: the per-project cache has no entry for this
+      // worktree, but the merged c2g store does.
+      if (rows.length === 0 && typeof args.symbol === 'string' && args.symbol.length > 0) {
+        const store = embedStoreFor(config)
+        if (store !== null) {
+          const hits = embedLocate(store.path, args.symbol, { worktree: repo, file: args.file, overrides: embedOverrides(config), limit: 10 }, config.sqliteBin)
+          if (hits.length > 0) {
+            const results = hits.map(h => `${h.name} [${h.kind}] ${embedDisplayPath(h)} (${h.repo}${h.exists ? '' : ', path not in this worktree'})`)
+            const files = hits.filter(h => h.exists).map(h => `${h.path}:${h.line}`)
+            appendEntry(paths, {
+              task,
+              kind: 'locate',
+              stage: 'localize',
+              cmd: `c2g-embed locate name=${args.symbol} store=${store.path}`,
+              ...(files.length > 0 ? { files } : {}),
+              text: results.join('; ').slice(0, 500),
+              note: `merged c2g store${store.builtAt !== null ? ` built ${store.builtAt}` : ''} (shard-relative paths mapped to this worktree)`,
+            })
+            const { evaluation } = loadTask(stateRoot, task)
+            const summary = summarize(evaluation)
+            return { found: true, results, source: `c2g-embed ${embedStoreLabel(store)}`, gates: summary.gates, next: summary.next }
+          }
+        }
       }
 
       // Text-level fallback: the graph has no answer (no cache, or the symbol is
@@ -385,6 +459,37 @@ export function apply(ctx, config) {
         callSites = c2gCallers(db, args.symbol, opts)
         transitive = c2gImpact(db, args.symbol, { ...opts, depth: args.depth ?? config.c2gDepth, limit: 60 })
         called = c2gCallees(db, args.symbol, opts)
+      }
+
+      // Merged-store fallback before falling back to text: it resolves call
+      // links across every worktree of the repository.
+      if (db === null || callSites.length + transitive.length + called.length === 0) {
+        const store = embedStoreFor(config)
+        if (store !== null) {
+          const options = { worktree: repo, overrides: embedOverrides(config), limit: 40 }
+          const embedCalls = embedCallers(store.path, args.symbol, options, config.sqliteBin)
+          const embedImpactRows = embedImpact(store.path, args.symbol, { ...options, depth: args.depth ?? config.c2gDepth, limit: 60 }, config.sqliteBin)
+          const embedCalled = embedCallees(store.path, args.symbol, options, config.sqliteBin)
+          if (embedCalls.length + embedImpactRows.length + embedCalled.length > 0) {
+            const callerLines = embedCalls.map(r => `${r.caller} ${embedDisplayPath(r)}`)
+            const impactLines = embedImpactRows.map(r => `d${r.depth} ${r.caller} ${embedDisplayPath(r)}`)
+            const calleeLines = embedCalled.map(r => `${r.callee} ${embedDisplayPath(r)}`)
+            const files = [...new Set([...embedCalls, ...embedImpactRows, ...embedCalled].filter(r => r.exists).map(r => r.path))].filter(Boolean)
+            appendEntry(paths, {
+              task,
+              kind: 'blast',
+              stage: 'blast',
+              cmd: `c2g-embed blast ${args.symbol} depth=${args.depth ?? config.c2gDepth} store=${store.path}`,
+              symbols: [args.symbol],
+              files,
+              text: `${callerLines.length} resolved call sites, ${impactLines.length} transitive, ${calleeLines.length} callees`.slice(0, 500),
+              note: `merged c2g store${store.builtAt !== null ? ` built ${store.builtAt}` : ''} — resolved links, snapshot not per-worktree HEAD`,
+            })
+            const { evaluation } = loadTask(stateRoot, task)
+            const summary = summarize(evaluation)
+            return { symbol: args.symbol, callers: callerLines, impact: impactLines, callees: calleeLines, fileCount: files.length, gates: summary.gates, next: summary.next }
+          }
+        }
       }
 
       // Text-level fallback: occurrence sites, explicitly not a resolved graph.
@@ -845,6 +950,19 @@ export function apply(ctx, config) {
             }
           } catch {
             // A file c2g never indexed simply contributes no dependents.
+          }
+        }
+      } else {
+        const store = embedStoreFor(config)
+        if (store !== null) {
+          for (const file of changed.slice(0, 200)) {
+            try {
+              for (const row of embedDependentFiles(store.path, repo, file, { depth, overrides: embedOverrides(config) }, config.sqliteBin)) {
+                if (row.exists && row.path && !changed.includes(row.path)) ripple.add(row.path)
+              }
+            } catch {
+              // A path no shard claims contributes no dependents.
+            }
           }
         }
       }

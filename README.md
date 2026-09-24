@@ -87,6 +87,9 @@ Every key has a schema default; override by re-stating the row's whole config in
 | `tgrepIndexDir` | `<cacheDir>/tgrep` | Where out-of-tree tgrep indexes live (one directory per root). |
 | `cacheDir` | `~/.cache/dsh-drill` | Cache root for derived data. Never `/tmp`. |
 | `cacheTtlDays` | `7` | Idle time before a cache entry is removed; `0` disables expiry. |
+| `embedEnabled` | `true` | Use the merged c2g store as the second resolution layer. |
+| `embedStore` | `~/Embed/c2g/graph_index.sqlite` | Path to the merged c2g graph store. |
+| `embedRepoMap` | `''` | Override shard labels, e.g. `nd_src=nodedb/src,nd_sql=nodedb-sql`. |
 | `autoIndex` | `false` | When true, a missing index is built on the first search instead of falling back to rg. Off by default so a search never writes unexpectedly. |
 | `rgBin` | `rg` | ripgrep binary name or absolute path. |
 | `tgrepBin` | `tgrep` | tgrep binary name or absolute path; `~/.local/bin` and `~/.cargo/bin` are searched after `PATH`. |
@@ -112,13 +115,44 @@ The graph is authoritative when it answers, but it does not always: a repository
 
 | Layer | Used for | Evidence label |
 |---|---|---|
-| **c2g** (read-only SQL over `~/.cache/code2graph`) | resolved definitions, call sites, callees, transitive impact, reverse-edge dependents | `c2g <db>` |
-| **tgrep** (trigram index at `<root>/.tgrep`) | fast substring/regex over an indexed root | `tgrep <bin> (text-level)` |
+| **c2g CLI cache** (read-only SQL over `~/.cache/code2graph/projects/<key>/cache.sqlite3`) | resolved definitions, call sites, callees, transitive impact, reverse-edge dependents, for the exact worktree that was indexed | `c2g <db>` |
+| **merged c2g store** (`~/Embed/c2g/graph_index.sqlite`) | the same questions for **any worktree of the repository** — one merged graph, shard paths mapped to the worktree | `c2g-embed <store> (built <ts>)` |
+| **tgrep** (trigram index under `<cacheDir>/tgrep`) | fast substring/regex over an indexed root | `tgrep <bin> (text-level)` |
 | **rg** (ripgrep) | everything else, and any root without a tgrep index | `rg <bin> (text-level)` |
 
 `auto` prefers tgrep only when the root actually carries an index — an unindexed tgrep run scans every file and writes a warning into the evidence log, which is worse than ripgrep. Both engines emit the same `--json` match stream, so one parser reads them.
 
 **Indexes live outside the repository.** A tgrep index normally sits at `<root>/.tgrep`, which would add untracked files to a drill worktree and surface in `git status` — exactly what the drill's own preflight checks look at. `drill_index` (and `autoIndex`) instead pass `--index-path`, writing to `~/.cache/dsh-drill/tgrep/<root-slug>/`: measured at ~1.5 s and ~60 MB per NodeDB worktree, ~92 MB peak RAM, and the worktree gains nothing.
+
+## Merged c2g store (`~/Embed`)
+
+`~/Embed` is the machine's embedding and merged-graph store (`RULES.md` there owns the layout). Its `c2g/graph_index.sqlite` is a **different artifact** from the per-project CLI cache: one file with `nodes(id, name, kind, file, repo, line)` and `links(source, target, relation)`, merged from per-crate shards and rebuilt on import. Because it is merged, it answers for *every* worktree of the repository — which is exactly the gap the per-project cache leaves.
+
+Paths inside it are shard-relative, so the plugin maps them and only claims a mapping it can confirm on disk:
+
+| Shard | Worktree path | |
+|---|---|---|
+| `nd_src` | `nodedb/src` | verified |
+| `nd_tests` | `nodedb/tests` | verified |
+| `nd_sql` | `nodedb-sql` | verified |
+| `nd_cluster` | `nodedb-cluster` | verified |
+| `nd_types` | `nodedb-types` | verified |
+| `nd_vector` | `nodedb-vector` | verified |
+| `nd_rest` | already worktree-relative | verified |
+
+A row whose mapped path is absent from the worktree is returned with `path not in this worktree` rather than silently reported as present.
+
+**This is a snapshot, not the worktree's HEAD.** Evidence recorded from it says so, and carries the store's build time from `manifest.json` (`c2g-embed … (built 2026-09-24T05:24:54+0800)`). Precedence stays: the per-worktree CLI cache is freshest, the merged store answers next, and text search is last.
+
+Measured on `nodedb-296` (no per-worktree cache, merged store present):
+
+```
+drill_start  → stage 1–2: no per-worktree c2g cache, merged c2g store available
+               (/home/maya/Embed/c2g/graph_index.sqlite (built 2026-09-24T05:24:54+0800)); tgrep index ready
+drill_locate nextval_batch → nodedb/src/control/sequence/registry.rs:227 (nd_src)
+                             nodedb/src/control/sequence/types.rs:91   (nd_src)
+drill_blast  catalog_err   → 40 resolved call sites, 60 transitive callers in 24 files
+```
 
 ## Cache and expiry
 
@@ -152,17 +186,19 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 - **Evidence is bound to a commit** — `drill_run` records `head` + `branch`; `drill_review` records `head`. The `review` gate reopens when HEAD moved after the review, and the report names the commit evidence belongs to (or lists the commits it spans).
 - **`lib/git.js`** — read-only git queries (`rev-parse HEAD`, branch, `diff --name-only`) that answer null/empty outside a repository instead of throwing.
 - **`drill_search` + `lib/search.js`** — tgrep/rg text search as the honest fallback for stages 1–2, with engine auto-selection and text-level labelling.
+- **merged c2g store as the second resolution layer** — `~/Embed/c2g/graph_index.sqlite` answers for every worktree of a repository through a verified shard-path map, so a missing per-worktree cache no longer costs the drill its resolved call graph (it previously fell straight to text search). The store's build time is carried into every record it produces.
 - **`drill_cache` + one expiring cache root** — discovery results and indexes share `~/.cache/dsh-drill`, the TTL is idle-based with a week's default, stale entries are dropped on read (a database that vanished, or an entry recorded before coverage required a snapshot), and `drill_cache status|prune|clear` makes the whole thing inspectable. c2g discovery also stops re-probing every project directory with a sqlite3 process on each call.
 - **`drill_index` + out-of-tree indexes** — `--index-path` support keeps the trigram index in `~/.cache/tgrep-index/`, so coverage is added without dirtying a worktree; `drill_start` names the engine that will answer; c2g discovery now picks the **most specific** matching cache root (with an active snapshot preferred), so a stale cache indexed at a parent directory cannot shadow the real one.
 
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 60 tests
+npm test        # node --test test/*.test.js — 67 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts
 - git/role: real repositories for `headSha`/`branchName`/`diffFiles` (including the non-repo path); frontmatter parsing, project→user→bundled precedence, tool-filter expansion, budget reading
+- embed store: manifest reading, shard↔worktree path mapping both ways (round trip, overrides, unconfirmed paths), definition/caller/callee/impact/dependent queries over `links` with a relation filter, and a false `isUsable` for a non-database
 - cache: TTL by idleness with touch-extends-life, prune protecting the keep list, size accounting, discovery cache hit/miss/expiry/forget, an entry without a snapshot never being served, and index pruning that keeps roots in use
 - search: binary resolution, engine auto-selection against an indexed vs unindexed root, out-of-tree index build/read-back/root matching (including that no `.tgrep` appears inside the repo), ripgrep/tgrep JSON parsing, definition-shaped patterns, miss-vs-failure exit codes, unavailable-engine reporting
 - c2g: a synthetic cache exercises the SQL (JSON-encoded `kind`/`role`, line from the symbol blob, duplicate names across crates, read-only refusal)

@@ -1,7 +1,7 @@
 {
   "name": "dsh-drill",
-  "version": "0.5.0",
-  "description": "Evidence-gated bug-fix drill for DeepSeek Harness: stage gates, plugin-run red/green proofs bound to a commit, c2g localization and blast radius with a tgrep index fallback, and a single auto-expiring cache under ~/.cache/dsh-drill.",
+  "version": "0.6.0",
+  "description": "Evidence-gated bug-fix drill for DeepSeek Harness: stage gates, plugin-run red/green proofs bound to a commit, localization and blast radius from the per-project c2g cache or the merged ~/Embed c2g store, tgrep/rg text fallback, and one auto-expiring cache.",
   "type": "module",
   "main": "./index.js",
   "exports": {

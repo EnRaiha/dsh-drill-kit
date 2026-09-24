@@ -354,3 +354,45 @@ test('drill_index builds an out-of-tree index that drill_search then uses', { sk
   assert.match(found.source, /tgrep/)
   assert.match(found.source, /text-level/)
 })
+
+test('the merged c2g store answers before any text search', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const worktree = join(workspace, 'merged-worktree')
+  const store = join(workspace, 'Embed', 'c2g', 'graph_index.sqlite')
+  mkdirSync(join(workspace, 'Embed', 'c2g'), { recursive: true })
+  mkdirSync(join(worktree, 'nodedb', 'src', 'control'), { recursive: true })
+  writeFileSync(join(worktree, 'nodedb', 'src', 'control', 'a.rs'), 'pub fn target_fn() {}\n')
+  writeFileSync(join(worktree, 'nodedb', 'src', 'control', 'c.rs'), 'fn caller_fn() { target_fn(); }\n')
+  writeFileSync(join(workspace, 'Embed', 'c2g', 'manifest.json'), JSON.stringify({ built_at: '2026-09-24T05:24:54+0800', count: 2 }))
+  execFileSync('sqlite3', [store], { input: `
+    CREATE TABLE nodes(id TEXT PRIMARY KEY, name TEXT, kind TEXT, file TEXT, repo TEXT, line INTEGER);
+    CREATE TABLE links(source TEXT, target TEXT, relation TEXT);
+    INSERT INTO nodes VALUES ('n1','target_fn','Function','nd_src/control/a.rs','nd_src',1),('n2','caller_fn','Function','nd_src/control/c.rs','nd_src',12);
+    INSERT INTO links VALUES ('n2','n1','CALL');
+  ` })
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedStore: store }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-embed', header: { cwd: workspace } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'embed-drill', repo: worktree, base: 'HEAD' })
+  const located = await call('drill_locate', { symbol: 'target_fn' })
+  assert.equal(located.found, true)
+  assert.match(located.source, /c2g-embed/)
+  assert.match(located.source, /built 2026-09-24/)
+  assert.match(located.results[0], /nodedb\/src\/control\/a\.rs:1/, 'the shard path is mapped into the worktree')
+
+  const ledger = readFileSync(join(workspace, '.drill', 'embed-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const locate = ledger.find(e => e.kind === 'locate')
+  assert.match(locate.note, /merged c2g store/)
+  assert.deepEqual(locate.files, ['nodedb/src/control/a.rs:1'])
+
+  const blast = await call('drill_blast', { symbol: 'target_fn' })
+  assert.equal(blast.callers.length, 1, 'the resolved call link is reported')
+  assert.match(blast.callers[0], /caller_fn nodedb\/src\/control\/c\.rs:12/)
+  const blastRecord = readFileSync(join(workspace, '.drill', 'embed-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.kind === 'blast').at(-1)
+  assert.match(blastRecord.note, /resolved links, snapshot not per-worktree HEAD/)
+})
