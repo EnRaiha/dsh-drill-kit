@@ -9,7 +9,7 @@
  * @module dsh-drill
  */
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,7 +25,8 @@ import { runCapture } from './lib/runner.js'
 import { callees as c2gCallees, callers as c2gCallers, dependentFiles, discoverDb, impact as c2gImpact, locateByFrame, locateByName } from './lib/c2g.js'
 import { branchName, diffFiles, headSha } from './lib/git.js'
 import { resolveRole, roleBudget, roleToolFilter } from './lib/role.js'
-import { DEFAULT_INDEX_DIR, definitionPattern, indexFor, indexRoot, resolveBin, resolveEngine, searchText } from './lib/search.js'
+import { DEFAULT_INDEX_DIR, definitionPattern, indexFor, indexRoot, indexesSize, legacyIndexDir, pruneIndexes, resolveBin, resolveEngine, searchText } from './lib/search.js'
+import { cacheRoot, drop, readCache, sizeOf } from './lib/cache.js'
 
 export const name = 'dsh-drill'
 export const inject = ['tools']
@@ -50,6 +51,8 @@ export const Config = z.object({
   searchEngine: z.union(['auto', 'rg', 'tgrep']).default('auto'),
   tgrepIndexDir: z.string().default(''),
   autoIndex: z.boolean().default(false),
+  cacheDir: z.string().default(''),
+  cacheTtlDays: z.number().min(0).step(1).default(7),
   rgBin: z.string().default('rg'),
   tgrepBin: z.string().default('tgrep'),
   searchMaxHits: z.number().min(1).step(1).default(200),
@@ -90,25 +93,42 @@ function roots(exec, config) {
 function c2gDb(repo, config) {
   if (!config.c2gEnabled) return null
   try {
+    const options = { cacheDir: drillCacheDir(config), ttlMs: cacheTtlMs(config) }
     const found = config.c2gCacheDir && config.c2gCacheDir.length > 0
-      ? discoverDb(repo, config.c2gCacheDir, config.sqliteBin)
-      : discoverDb(repo, undefined, config.sqliteBin)
+      ? discoverDb(repo, config.c2gCacheDir, config.sqliteBin, options)
+      : discoverDb(repo, undefined, config.sqliteBin, options)
     return found?.db ?? null
   } catch {
     return null
   }
 }
 
+/** The drill cache root in use: `cacheDir` config, else the default cache root. */
+function drillCacheDir(config) {
+  return cacheRoot(config.cacheDir && config.cacheDir.length > 0 ? config.cacheDir : undefined)
+}
+
+/** Cache time to live in milliseconds; `cacheTtlDays: 0` disables expiry. */
+function cacheTtlMs(config) {
+  return config.cacheTtlDays > 0 ? config.cacheTtlDays * 24 * 60 * 60 * 1000 : 0
+}
+
+/** Index base directory: `tgrepIndexDir` config, else `<cacheDir>/tgrep`. */
+function indexBase(config) {
+  if (config.tgrepIndexDir && config.tgrepIndexDir.length > 0) return config.tgrepIndexDir
+  return config.cacheDir && config.cacheDir.length > 0 ? join(config.cacheDir, 'tgrep') : DEFAULT_INDEX_DIR
+}
+
 /**
  * Common text-search options: engine choice, binaries, and the out-of-tree
- * tgrep index location (empty config means the default cache directory).
+ * tgrep index location (empty config means the cache directory).
  */
 function searchArgs(config, extra = {}) {
   return {
     engine: config.searchEngine,
     rgBin: config.rgBin,
     tgrepBin: config.tgrepBin,
-    indexDir: config.tgrepIndexDir && config.tgrepIndexDir.length > 0 ? config.tgrepIndexDir : DEFAULT_INDEX_DIR,
+    indexDir: indexBase(config),
     maxHits: config.searchMaxHits,
     ...extra,
   }
@@ -123,13 +143,22 @@ function searchArgs(config, extra = {}) {
  */
 function maybeIndex(root, config, run) {
   if (!config.autoIndex) return run()
-  const baseDir = config.tgrepIndexDir && config.tgrepIndexDir.length > 0 ? config.tgrepIndexDir : DEFAULT_INDEX_DIR
+  const baseDir = indexBase(config)
   if (indexFor(root, baseDir) !== null) return run()
   if (resolveBin(config.tgrepBin) === null) return run()
   const built = indexRoot({ root, baseDir, tgrepBin: config.tgrepBin })
   const result = run()
   if (built.ok) result.indexed = built.dir
   return result
+}
+
+/** List a directory's entry names, or an empty list when it does not exist. */
+function readdirSyncSafe(dir) {
+  try {
+    return readdirSync(dir)
+  } catch {
+    return []
+  }
 }
 
 /** Read the active drill task recorded by `drill_start`, if any. */
@@ -222,8 +251,7 @@ export function apply(ctx, config) {
       // Advise which stage 1–2 engine will answer, without writing anything.
       const repoRoot = args.repo !== undefined ? resolve(cwd, args.repo) : cwd
       const c2gReady = c2gDb(repoRoot, config) !== null
-      const baseDir = config.tgrepIndexDir && config.tgrepIndexDir.length > 0 ? config.tgrepIndexDir : DEFAULT_INDEX_DIR
-      const tgrepReady = indexFor(repoRoot, baseDir) !== null
+      const tgrepReady = indexFor(repoRoot, indexBase(config)) !== null
       const coverage = c2gReady
         ? 'stage 1–2: c2g cache covers this repo'
         : tgrepReady
@@ -508,6 +536,8 @@ export function apply(ctx, config) {
           trigrams: { type: 'integer' },
           engine: { type: 'string' },
           c2gCovered: { type: 'boolean' },
+          pruned: { type: 'integer' },
+          freedBytes: { type: 'integer' },
           error: { type: 'string' },
           gates: { type: 'array', items: { type: 'string' } },
           next: { type: 'string' },
@@ -516,7 +546,7 @@ export function apply(ctx, config) {
       render: (_args, value) => [{
         type: 'text',
         text: value.ok
-          ? `tgrep index ready: ${value.files ?? '?'} files, ${value.trigrams ?? '?'} trigrams\nroot: ${value.root}\ndir:  ${value.dir}\nengine now: ${value.engine} (c2g covered: ${value.c2gCovered})${value.next ? `\nnext: ${value.next}` : ''}`
+          ? `tgrep index ready: ${value.files ?? '?'} files, ${value.trigrams ?? '?'} trigrams\nroot: ${value.root}\ndir:  ${value.dir}\nengine now: ${value.engine} (c2g covered: ${value.c2gCovered})${value.pruned > 0 ? `\npruned ${value.pruned} idle index(es), freed ${Math.round((value.freedBytes ?? 0) / 1048576)} MB` : ''}${value.next ? `\nnext: ${value.next}` : ''}`
           : `index failed: ${value.error}`,
       }],
     },
@@ -526,9 +556,10 @@ export function apply(ctx, config) {
       const paths = taskPaths(stateRoot, task)
       const active = readActive(stateRoot) ?? {}
       const repo = args.root !== undefined ? resolve(cwd, args.root) : (active.repo !== undefined ? resolve(String(active.repo)) : cwd)
-      const baseDir = config.tgrepIndexDir && config.tgrepIndexDir.length > 0 ? config.tgrepIndexDir : DEFAULT_INDEX_DIR
+      const baseDir = indexBase(config)
 
       const built = indexRoot({ root: repo, baseDir, tgrepBin: config.tgrepBin, force: args.force === true })
+      const pruned = pruneIndexes({ baseDir, ttlMs: cacheTtlMs(config), keepRoots: [repo] })
       const c2gCovered = c2gDb(repo, config) !== null
       const engine = resolveEngine({ engine: config.searchEngine, root: repo, rgBin: config.rgBin, tgrepBin: config.tgrepBin, indexDir: baseDir })?.engine ?? null
 
@@ -537,7 +568,7 @@ export function apply(ctx, config) {
         kind: 'note',
         stage: 'localize',
         text: built.ok ? `tgrep index ${built.dir}` : `tgrep index failed: ${built.error}`,
-        note: built.ok ? `${built.meta?.files ?? '?'} files, ${built.meta?.trigrams ?? '?'} trigrams, engine=${engine}, c2g=${c2gCovered}` : 'index build failed',
+        note: built.ok ? `${built.meta?.files ?? '?'} files, ${built.meta?.trigrams ?? '?'} trigrams, engine=${engine}, c2g=${c2gCovered}${pruned.removed.length > 0 ? `, pruned ${pruned.removed.length}` : ''}` : 'index build failed',
         repo,
       })
       const { evaluation } = loadTask(stateRoot, task)
@@ -550,10 +581,104 @@ export function apply(ctx, config) {
         ...(built.meta?.trigrams !== null && built.meta?.trigrams !== undefined ? { trigrams: built.meta.trigrams } : {}),
         ...(engine !== null ? { engine } : {}),
         c2gCovered,
+        pruned: pruned.removed.length,
+        freedBytes: pruned.freedBytes,
         ...(built.error !== null ? { error: built.error } : {}),
         gates: summary.gates,
         next: summary.next,
       }
+    },
+  })
+
+  tool({
+    name: 'drill_cache',
+    description: 'Inspect or clean the drill cache: discovery results and tgrep indexes under the cache root (never /tmp). `status` reports size, entry count and the idle time to live; `prune` removes entries unused for longer than the TTL; `clear` removes all derived cache data (everything is rebuildable).',
+    parameters: {
+      action: { type: 'string', enum: ['status', 'prune', 'clear'], required: true, description: 'status | prune | clear' },
+      task: { type: 'string', description: 'Task id; defaults to the active drill task.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          cacheDir: { type: 'string', required: true },
+          ttlDays: { type: 'integer', required: true },
+          indexDir: { type: 'string', required: true },
+          indexBytes: { type: 'integer' },
+          indexEntries: { type: 'array', items: { type: 'string' } },
+          discoveryBytes: { type: 'integer' },
+          discoveryEntries: { type: 'integer' },
+          removed: { type: 'array', items: { type: 'string' } },
+          freedBytes: { type: 'integer' },
+          legacyDir: { type: 'string' },
+          note: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: [
+          `cache: ${value.cacheDir} (idle TTL ${value.ttlDays}d)`,
+          `indexes: ${value.indexEntries.length} entries, ${(value.indexBytes / 1048576).toFixed(1)} MB at ${value.indexDir}`,
+          `discovery: ${value.discoveryEntries} repos, ${(value.discoveryBytes / 1024).toFixed(1)} KB`,
+          value.removed.length > 0 ? `removed: ${value.removed.join(', ')} (freed ${(value.freedBytes / 1048576).toFixed(1)} MB)` : null,
+          value.legacyDir ? `legacy index cache still present at ${value.legacyDir}` : null,
+          value.note ?? null,
+        ].filter(Boolean).join('\n'),
+      }],
+    },
+    async execute(args, exec) {
+      const { stateRoot } = roots(exec, config)
+      const task = resolveTask(args, stateRoot)
+      const paths = taskPaths(stateRoot, task)
+      const cacheDir = drillCacheDir(config)
+      const baseDir = indexBase(config)
+      const ttlMs = cacheTtlMs(config)
+      const ttlDays = config.cacheTtlDays
+
+      const discoveryPath = join(cacheDir, 'c2g-discovery.json')
+      let removed = []
+      let freedBytes = 0
+      let note = null
+
+      if (args.action === 'prune') {
+        const pruned = pruneIndexes({ baseDir, ttlMs, keepRoots: [readActive(stateRoot)?.repo].filter(Boolean).map(String) })
+        removed = pruned.removed
+        freedBytes = pruned.freedBytes
+        // Discovery entries expire on read; drop the file when nothing is left.
+        const discovery = readCache(discoveryPath, ttlMs)
+        if (discovery === null) drop(discoveryPath)
+        note = `pruned ${removed.length} idle index(es)`
+      } else if (args.action === 'clear') {
+        freedBytes = indexesSize(baseDir) + sizeOf(discoveryPath)
+        drop(baseDir)
+        drop(discoveryPath)
+        note = 'cleared derived cache data; the next search rebuilds what it needs'
+      }
+
+      const entries = (() => {
+        try {
+          return readdirSyncSafe(baseDir)
+        } catch {
+          return []
+        }
+      })()
+      const discovery = readCache(discoveryPath, ttlMs)
+      const result = {
+        cacheDir,
+        ttlDays,
+        indexDir: baseDir,
+        indexBytes: indexesSize(baseDir),
+        indexEntries: entries,
+        discoveryBytes: sizeOf(discoveryPath),
+        discoveryEntries: discovery === null ? 0 : Object.keys(discovery.entries ?? {}).length,
+        removed,
+        freedBytes,
+        ...(legacyIndexDir() !== null ? { legacyDir: legacyIndexDir() } : {}),
+        ...(note !== null ? { note } : {}),
+      }
+      appendEntry(paths, { task, kind: 'note', stage: 'localize', text: `drill_cache ${args.action}`, note: `${result.indexEntries.length} indexes, ${(result.indexBytes / 1048576).toFixed(1)} MB${removed.length > 0 ? `, removed ${removed.length}` : ''}` })
+      return result
     },
   })
 

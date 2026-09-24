@@ -62,9 +62,9 @@ test('the module implements the host contract and compiles every tool schema', {
   assert.equal(typeof mod.apply, 'function')
 
   const ctx = fakeContext()
-  mod.apply(ctx, mod.Config({}))
+  mod.apply(ctx, mod.Config({ cacheDir: join(workspace, 'cache') }))
 
-  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_search', 'drill_index', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
+  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_search', 'drill_index', 'drill_cache', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
   assert.deepEqual([...ctx.tools_registered.keys()].sort(), expected.sort())
   for (const [name, definition] of ctx.tools_registered) {
     assert.equal(typeof definition.output.render, 'function', `${name} must render`)
@@ -120,7 +120,7 @@ test('a full red→green→review drill drives the gates to READY', { skip }, as
 test('a claim without a run is refused', { skip }, async () => {
   const mod = await import('../index.js')
   const ctx = fakeContext()
-  mod.apply(ctx, mod.Config({ reminder: false }))
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache') }))
   const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
 
   await call('drill_start', { task: 'issue-refuse', repo: workspace })
@@ -138,7 +138,7 @@ test('a claim without a run is refused', { skip }, async () => {
 test('drill_setup installs the skill and the auditor role', { skip }, async () => {
   const mod = await import('../index.js')
   const ctx = fakeContext()
-  mod.apply(ctx, mod.Config({ reminder: false }))
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache') }))
   const home = join(workspace, 'fakedsh')
   const result = await ctx.tools_registered.get('drill_setup').execute({ dshHome: home }, exec)
   assert.match(readFileSync(result.skill, 'utf8'), /name: drill/)
@@ -148,7 +148,7 @@ test('drill_setup installs the skill and the auditor role', { skip }, async () =
 test('the turn-stopping reminder names the open gates', { skip }, async () => {
   const mod = await import('../index.js')
   const ctx = fakeContext()
-  mod.apply(ctx, mod.Config({}))
+  mod.apply(ctx, mod.Config({ cacheDir: join(workspace, 'cache') }))
   const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
   await call('drill_start', { task: 'issue-remind', repo: workspace })
 
@@ -184,7 +184,7 @@ test('drill_diff turns a branch diff into blast evidence with a proposed checkli
 
   const mod = await import('../index.js')
   const ctx = fakeContext()
-  mod.apply(ctx, mod.Config({ reminder: false }))
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache') }))
   const call = (name, args) => ctx.tools_registered.get(name).execute(args, { signal: new AbortController().signal, agent: { session: { id: 's-git', header: { cwd: repo } } } })
 
   await call('drill_start', { task: 'git-drill', repo, base, issue: '1' })
@@ -229,7 +229,7 @@ test('drill_review drives the role file and binds the verdict to HEAD', { skip }
 
   const mod = await import('../index.js')
   const ctx = fakeContext({ subagents })
-  mod.apply(ctx, mod.Config({ reminder: false }))
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache') }))
   const exec = { signal: new AbortController().signal, agent: { session: { id: 's-rev', header: { cwd: repo } } } }
   const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
 
@@ -257,7 +257,7 @@ test('drill_review drives the role file and binds the verdict to HEAD', { skip }
 test('drill_review refuses to invent a verdict when the subagent service is absent', { skip }, async () => {
   const mod = await import('../index.js')
   const ctx = fakeContext()
-  mod.apply(ctx, mod.Config({ reminder: false }))
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache') }))
   await assert.rejects(
     () => ctx.tools_registered.get('drill_review').execute({ task: 'x' }, exec),
     /subagents service is not mounted/,
@@ -280,7 +280,7 @@ test('stage 1–2 fall back to a labelled text search when no code graph covers 
 
   const mod = await import('../index.js')
   const ctx = fakeContext()
-  mod.apply(ctx, mod.Config({ reminder: false }))
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache') }))
   const exec = { signal: new AbortController().signal, agent: { session: { id: 's-fb', header: { cwd: repo } } } }
   const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
 
@@ -330,7 +330,7 @@ test('drill_index builds an out-of-tree index that drill_search then uses', { sk
 
   const mod = await import('../index.js')
   const ctx = fakeContext()
-  mod.apply(ctx, mod.Config({ reminder: false, tgrepIndexDir: indexBase, searchEngine: 'auto' }))
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: indexBase, searchEngine: 'auto' }))
   const exec = { signal: new AbortController().signal, agent: { session: { id: 's-idx', header: { cwd: repo } } } }
   const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
 
