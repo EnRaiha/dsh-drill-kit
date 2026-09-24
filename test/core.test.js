@@ -130,3 +130,31 @@ test('runner captures exit codes, output and timeouts', async () => {
   assert.equal(slow.timedOut, true)
   assert.equal(slow.exit, 124)
 })
+
+test('the review gate reopens when the reviewed commit is not the green commit', () => {
+  const paths = taskPaths(root, 'headbind')
+  appendEntry(paths, { task: 'headbind', kind: 'test', stage: 'patch', arm: 'base', exit: 101, log: logFor('headbind-red.log', 'boom\n') })
+  const green = logFor('headbind-green.log', 'ok\n')
+  appendEntry(paths, { task: 'headbind', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: green, head: 'a'.repeat(40) })
+  appendEntry(paths, { task: 'headbind', kind: 'hygiene', stage: 'patch', exit: 0, log: logFor('headbind-hyg.log', 'clean\n') })
+
+  appendEntry(paths, { task: 'headbind', kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0, head: 'b'.repeat(40) })
+  let evaluation = evaluate(readLedger(paths))
+  const review = evaluation.gates.find(g => g.id === 'review')
+  assert.equal(review.ok, false, 'a review of another commit cannot close the gate')
+  assert.match(review.detail, /re-run the review/)
+  assert.equal(evaluation.ready, false)
+
+  appendEntry(paths, { task: 'headbind', kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0, head: 'a'.repeat(40) })
+  evaluation = evaluate(readLedger(paths))
+  assert.equal(evaluation.gates.find(g => g.id === 'review').ok, true, 'the matching commit closes it')
+  assert.equal(evaluation.ready, true)
+})
+
+test('reports name the commit evidence is bound to', () => {
+  const paths = taskPaths(root, 'headreport')
+  appendEntry(paths, { task: 'headreport', kind: 'test', stage: 'patch', arm: 'base', exit: 1, cmd: 'cargo test', log: logFor('headreport-red.log', 'boom\n'), head: 'c'.repeat(40) })
+  const md = renderReport('headreport', readLedger(paths), {})
+  assert.match(md, /Evidence bound to commit `c{40}`/)
+  assert.match(md, /cccccccccccc/)
+})

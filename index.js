@@ -22,7 +22,9 @@ import { STAGES, appendEntry, readLedger, taskPaths, writeReport } from './lib/l
 import { evaluate, gateTable } from './lib/gates.js'
 import { renderReport } from './lib/report.js'
 import { runCapture } from './lib/runner.js'
-import { callees as c2gCallees, callers as c2gCallers, discoverDb, impact as c2gImpact, locateByFrame, locateByName } from './lib/c2g.js'
+import { callees as c2gCallees, callers as c2gCallers, dependentFiles, discoverDb, impact as c2gImpact, locateByFrame, locateByName } from './lib/c2g.js'
+import { branchName, diffFiles, headSha } from './lib/git.js'
+import { resolveRole, roleBudget, roleToolFilter } from './lib/role.js'
 
 export const name = 'dsh-drill'
 export const inject = ['tools']
@@ -36,12 +38,14 @@ export const Config = z.object({
   reminder: z.boolean().default(true),
   provider: z.string().default('spawn'),
   model: z.string().default(''),
+  defaultRole: z.string().default('drill-auditor'),
   maxReviewToolCalls: z.number().min(0).step(1).default(40),
   runTimeoutMs: z.number().min(0).step(1000).default(900_000),
   c2gEnabled: z.boolean().default(true),
   c2gCacheDir: z.string().default(''),
   sqliteBin: z.string().default('sqlite3'),
   c2gDepth: z.number().min(1).max(10).step(1).default(3),
+  rippleDepth: z.number().min(1).max(5).step(1).default(2),
 })
 
 const REVIEW_SCHEMA = {
@@ -55,7 +59,8 @@ const REVIEW_SCHEMA = {
   },
 }
 
-const REVIEW_PERSONA = [
+/** Persona used when no role file is installed, so the tool still works out of the box. */
+const FALLBACK_PERSONA = [
   'You are Review 2: a fresh-session, read-only structural auditor for one drill branch.',
   'You did not write this code, so never trust the branch narrative — count things, run read-only commands, and report evidence.',
   'Read-only: no edits, no commits, no pushes, no branch changes.',
@@ -63,6 +68,9 @@ const REVIEW_PERSONA = [
   'Follow /home/maya/.hermes/skills/devops/nodedb-parity-audit/SKILL.md when it exists; otherwise apply the same seven checks: test inventory parity, caller closure, producer/consumer enumeration, invariant chokepoints, module contracts, repo norms (bash /home/maya/scripts/nodedb-preflight.sh <repo> <base>), PR format.',
   'Any blocker means verdict FAIL. Do not soften a FAIL into a warning, and do not report style nits as blockers.',
 ].join(' ')
+
+/** Read-only tool allowlist used when the role file names no tools. */
+const FALLBACK_TOOLS = ['read', 'glob', 'grep']
 
 /** Resolve the workspace root for a tool call, then the drill state root inside it. */
 function roots(exec, config) {
@@ -374,22 +382,125 @@ export function apply(ctx, config) {
       const label = (args.label ?? kind).replaceAll(/[^A-Za-z0-9._-]/g, '-')
       const logPath = join(paths.dir, 'logs', `${stamp}-${label}${args.arm ? `-${args.arm}` : ''}.log`)
 
+      const repoDir = active.repo !== undefined ? resolve(String(active.repo)) : cwd
       const run = await runCapture({
         command: args.cmd,
         logPath,
-        cwd: active.repo !== undefined ? resolve(String(active.repo)) : cwd,
+        cwd: repoDir,
         timeoutMs: args.timeoutMs ?? config.runTimeoutMs,
         signal: exec.signal,
       })
 
+      const head = headSha(repoDir)
+      const branch = branchName(repoDir)
       appendEntry(
         paths,
-        { task, kind, stage: args.stage, cmd: args.cmd, exit: run.exit, log: run.logPath, ...(args.arm !== undefined ? { arm: args.arm } : {}), note: run.timedOut ? 'timed out' : undefined },
+        {
+          task,
+          kind,
+          stage: args.stage,
+          cmd: args.cmd,
+          exit: run.exit,
+          log: run.logPath,
+          ...(args.arm !== undefined ? { arm: args.arm } : {}),
+          ...(head !== null ? { head } : {}),
+          ...(branch !== null ? { branch } : {}),
+          note: run.timedOut ? 'timed out' : undefined,
+        },
         { requireLog: config.requireLog },
       )
       const { evaluation } = loadTask(stateRoot, task)
       const summary = summarize(evaluation)
       return { exit: run.exit, log: run.logPath, timedOut: run.timedOut, durationMs: run.durationMs, gates: summary.gates, next: summary.next }
+    },
+  })
+
+  tool({
+    name: 'drill_diff',
+    description: 'Stage 2b — turn the branch diff into a blast-radius evidence record: changed files against the base ref, the files that depend on them (c2g reverse edges, bounded depth), and a proposed manual-test checklist. Records `blast`; the edge-case gate still needs your own invariants.',
+    parameters: {
+      base: { type: 'string', description: 'Base ref; defaults to the task base (usually origin/main).' },
+      depth: { type: 'integer', description: 'Ripple depth; defaults to the row configuration.' },
+      task: { type: 'string', description: 'Task id; defaults to the active drill task.' },
+      record: { type: 'boolean', description: 'Record the result as `blast` evidence (default true).' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          base: { type: 'string' },
+          changed: { type: 'array', items: { type: 'string' } },
+          deleted: { type: 'array', items: { type: 'string' } },
+          ripple: { type: 'array', items: { type: 'string' } },
+          checklist: { type: 'array', items: { type: 'string' } },
+          recorded: { type: 'boolean' },
+          note: { type: 'string' },
+          gates: { type: 'array', items: { type: 'string' } },
+          next: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `diff vs ${value.base}: ${value.changed.length} changed, ${value.deleted.length} deleted, ${value.ripple.length} dependent files\nchanged:\n${value.changed.join('\n') || '- none'}\ndependents:\n${value.ripple.join('\n') || '- none'}\nproposed checklist:\n${value.checklist.map(line => `- ${line}`).join('\n') || '- none'}${value.note ? `\nnote: ${value.note}` : ''}\ngates: ${value.gates.join(' ')}\nnext: ${value.next}`,
+      }],
+    },
+    async execute(args, exec) {
+      const { cwd, stateRoot } = roots(exec, config)
+      const task = resolveTask(args, stateRoot)
+      const paths = taskPaths(stateRoot, task)
+      const active = readActive(stateRoot) ?? {}
+      const repo = active.repo !== undefined ? resolve(String(active.repo)) : cwd
+      const base = args.base ?? active.base ?? 'origin/main'
+      const depth = args.depth ?? config.rippleDepth
+
+      const { changed, deleted, error } = diffFiles(repo, base)
+      const db = c2gDb(repo, config)
+      const ripple = new Set()
+      if (db !== null) {
+        for (const file of changed.slice(0, 200)) {
+          try {
+            for (const row of dependentFiles(db, file, { depth })) {
+              if (row.file && !changed.includes(row.file)) ripple.add(row.file)
+            }
+          } catch {
+            // A file c2g never indexed simply contributes no dependents.
+          }
+        }
+      }
+
+      const checklist = [
+        ...changed.slice(0, 20).map(file => `${file} — happy path still returns the documented result`),
+        ...changed.slice(0, 10).map(file => `${file} — refusing/error path unchanged`),
+        ...[...ripple].slice(0, 20).map(file => `${file} (dependent) — call site still compiles and behaves`),
+      ]
+
+      const shouldRecord = args.record !== false && error === null && changed.length > 0
+      if (shouldRecord) {
+        appendEntry(paths, {
+          task,
+          kind: 'blast',
+          stage: 'blast',
+          cmd: `git diff --name-only --diff-filter=ACMR ${base}...HEAD`,
+          base,
+          files: [...changed, ...ripple],
+          text: `${changed.length} changed, ${ripple.size} dependent (depth ${depth})`.slice(0, 500),
+        })
+      }
+
+      const { evaluation } = loadTask(stateRoot, task)
+      const summary = summarize(evaluation)
+      return {
+        base,
+        changed,
+        deleted,
+        ripple: [...ripple],
+        checklist,
+        recorded: shouldRecord,
+        note: error ?? (changed.length === 0 ? 'no changed files against this base' : (db === null ? 'c2g cache unavailable: ripple not computed' : '')),
+        gates: summary.gates,
+        next: summary.next,
+      }
     },
   })
 
@@ -478,10 +589,11 @@ export function apply(ctx, config) {
 
   tool({
     name: 'drill_review',
-    description: 'Run Review 2: spawn a fresh-context, read-only reviewer subagent with a hard tool-call budget, record its verdict in the ledger, and report PASS/FAIL with blockers. The reviewer must never be the agent that wrote the code.',
+    description: 'Run Review 2: spawn a fresh-context, read-only reviewer subagent with a hard tool-call budget, record its verdict in the ledger bound to the reviewed commit, and report PASS/FAIL with blockers. The persona, tool policy and budget come from a role file (default `drill-auditor`: project .dsh/roles, then ~/.dsh/roles, then the bundled copy).',
     parameters: {
       task: { type: 'string', description: 'Task id; defaults to the active drill task.' },
       prompt: { type: 'string', description: 'What to audit: branch/worktree, base ref, and the scope of the change.' },
+      role: { type: 'string', description: 'Role id to audit with; defaults to the row configuration (drill-auditor).' },
       model: { type: 'string', description: 'Optional reviewer model override.' },
     },
     output: {
@@ -491,24 +603,44 @@ export function apply(ctx, config) {
         properties: {
           task: { type: 'string', required: true },
           verdict: { type: 'string', required: true },
-          blockers: { type: 'array', required: true, items: { type: 'string' } },
-          unverified: { type: 'array', required: true, items: { type: 'string' } },
+          blockers: { type: 'array', items: { type: 'string' } },
+          unverified: { type: 'array', items: { type: 'string' } },
           summary: { type: 'string', required: true },
-          gates: { type: 'array', required: true, items: { type: 'string' } },
+          role: { type: 'string', required: true },
+          roleSource: { type: 'string', required: true },
+          head: { type: 'string' },
+          gates: { type: 'array', items: { type: 'string' } },
           next: { type: 'string', required: true },
         },
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Review 2 — ${value.verdict}${value.blockers.length ? ` (${value.blockers.length} blockers)` : ''}\n${value.summary}${value.blockers.length ? `\nblockers:\n- ${value.blockers.join('\n- ')}` : ''}${value.unverified.length ? `\nunverified:\n- ${value.unverified.join('\n- ')}` : ''}\ngates: ${value.gates.join(' ')}\nnext: ${value.next}`,
+        text: `Review 2 — ${value.verdict}${value.blockers.length ? ` (${value.blockers.length} blockers)` : ''} · role ${value.role} (${value.roleSource})${value.head ? ` · commit ${value.head.slice(0, 12)}` : ''}\n${value.summary}${value.blockers.length ? `\nblockers:\n- ${value.blockers.join('\n- ')}` : ''}${value.unverified.length ? `\nunverified:\n- ${value.unverified.join('\n- ')}` : ''}\ngates: ${value.gates.join(' ')}\nnext: ${value.next}`,
       }],
     },
     async execute(args, exec) {
-      const { stateRoot } = roots(exec, config)
+      const { cwd, stateRoot } = roots(exec, config)
       const task = resolveTask(args, stateRoot)
       const paths = taskPaths(stateRoot, task)
       const subagents = ctx.get('subagents')
       if (subagents === undefined) throw new Error('drill: the subagents service is not mounted in this profile; record the review with drill_record instead')
+
+      const roleId = args.role ?? config.defaultRole
+      const role = resolveRole(roleId, { cwd, dshHome: process.env.DSH_HOME, bundledDir: join(HERE, 'roles') })
+      const persona = role && role.body.length > 0 ? role.body : FALLBACK_PERSONA
+      const roleSource = role?.source ?? 'builtin'
+
+      const visibleNames = typeof ctx.tools?.schemas === 'function'
+        ? ctx.tools.schemas(exec.agent).map(schema => schema.name)
+        : FALLBACK_TOOLS
+      const toolFilter = (role ? roleToolFilter(role, visibleNames) : undefined) ?? roleToolFilter({ data: { tools: FALLBACK_TOOLS } }, visibleNames)
+
+      const roleModel = typeof role?.data.model === 'string' && role.data.model.length > 0 ? role.data.model : null
+      const model = args.model ?? roleModel ?? config.model
+      const roleProvider = typeof role?.data.provider === 'string' && role.data.provider.length > 0 ? role.data.provider : null
+      const provider = roleProvider ?? config.provider
+      const roleMax = role ? roleBudget(role) : null
+      const budget = roleMax !== null && roleMax > 0 ? roleMax : config.maxReviewToolCalls
 
       const controller = new AbortController()
       const onAbort = () => controller.abort(exec.signal.reason)
@@ -516,10 +648,11 @@ export function apply(ctx, config) {
       else exec.signal.addEventListener('abort', onAbort, { once: true })
 
       const active = readActive(stateRoot) ?? {}
-      const task_text = args.prompt ?? `Audit the drill branch for task ${task}. repo=${active.repo ?? 'unknown'} base=${active.base ?? 'origin/main'}. Report the verdict table, blockers and unverified items.`
+      const repo = active.repo !== undefined ? resolve(String(active.repo)) : cwd
+      const head = headSha(repo)
+      const task_text = args.prompt ?? `Audit the drill branch for task ${task}. repo=${repo} base=${active.base ?? 'origin/main'}${head ? ` head=${head}` : ''}. Report the verdict table, blockers and unverified items.`
       let run
       let used = 0
-      const budget = config.maxReviewToolCalls
 
       const onEvent = (session, event) => {
         if (run === undefined || session.id !== run.id) return
@@ -531,18 +664,18 @@ export function apply(ctx, config) {
 
       try {
         try {
-          run = await subagents.start(config.provider, {
+          run = await subagents.start(provider, {
             label: `drill-review-${task}`,
             prompt: [{ type: 'text', text: task_text }],
             parent: exec.agent,
             signal: controller.signal,
-            persona: REVIEW_PERSONA,
-            toolFilter: { allow: ['read', 'glob', 'grep'] },
+            persona,
+            ...(toolFilter ? { toolFilter } : {}),
             outputSchema: REVIEW_SCHEMA,
-            ...(config.model ? { agentOptions: { model: config.model } } : {}),
+            ...(model ? { agentOptions: { model } } : {}),
           })
         } catch (error) {
-          throw new Error(`drill: could not start the reviewer subagent (provider "${config.provider}"): ${error instanceof Error ? error.message : String(error)}`)
+          throw new Error(`drill: could not start the reviewer subagent (provider "${provider}"): ${error instanceof Error ? error.message : String(error)}`)
         }
 
         const result = await run.result
@@ -554,13 +687,35 @@ export function apply(ctx, config) {
 
         const artifact = join(paths.artifacts, `review-${new Date().toISOString().replaceAll(':', '').slice(0, 15)}.md`)
         mkdirSync(paths.artifacts, { recursive: true })
-        writeFileSync(artifact, `# Review 2 — ${task}\n\nverdict: ${verdict}\nstopReason: ${result.stopReason}\ntoolCalls: ${used}/${budget || 'unlimited'}\n\n## Summary\n\n${summary}\n\n## Blockers\n\n${blockers.length ? blockers.map(b => `- ${b}`).join('\n') : '- none'}\n\n## Unverified\n\n${unverified.length ? unverified.map(u => `- ${u}`).join('\n') : '- none'}\n`, 'utf8')
+        writeFileSync(artifact, `# Review 2 — ${task}\n\nverdict: ${verdict}\nrole: ${roleId} (${roleSource}) · ${role?.path ?? 'builtin persona'}\nprovider: ${provider}${model ? ` · model: ${model}` : ''}\ntools: ${toolFilter ? toolFilter.allow.join(', ') : 'unrestricted'}\nstopReason: ${result.stopReason}\ntoolCalls: ${used}/${budget || 'unlimited'}${head ? `\nhead: ${head}` : ''}\n\n## Summary\n\n${summary}\n\n## Blockers\n\n${blockers.length ? blockers.map(b => `- ${b}`).join('\n') : '- none'}\n\n## Unverified\n\n${unverified.length ? unverified.map(u => `- ${u}`).join('\n') : '- none'}\n`, 'utf8')
 
-        appendEntry(paths, { task, kind: 'review', stage: 'review', verdict, blockers: blockers.length, text: summary, log: artifact, cmd: `subagent:${config.provider}${config.model ? `/${config.model}` : ''}` }, { requireLog: config.requireLog })
+        appendEntry(paths, {
+          task,
+          kind: 'review',
+          stage: 'review',
+          verdict,
+          blockers: blockers.length,
+          text: summary,
+          log: artifact,
+          cmd: `subagent:${provider}${model ? `/${model}` : ''} role=${roleId}`,
+          role: roleId,
+          ...(head !== null ? { head } : {}),
+        }, { requireLog: config.requireLog })
 
         const { evaluation } = loadTask(stateRoot, task)
         const gateSummary = summarize(evaluation)
-        return { task, verdict, blockers, unverified, summary, gates: gateSummary.gates, next: gateSummary.next }
+        return {
+          task,
+          verdict,
+          blockers,
+          unverified,
+          summary,
+          role: roleId,
+          roleSource,
+          ...(head !== null ? { head } : {}),
+          gates: gateSummary.gates,
+          next: gateSummary.next,
+        }
       } finally {
         exec.signal.removeEventListener('abort', onAbort)
         if (run !== undefined) {

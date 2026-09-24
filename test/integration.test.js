@@ -25,8 +25,8 @@ const skip = (() => {
 const workspace = mkdtempSync(join(tmpdir(), 'drill-int-'))
 after(() => rmSync(workspace, { recursive: true, force: true }))
 
-/** Minimal Cordis-like context that records tool registrations. */
-function fakeContext() {
+/** Minimal Cordis-like context that records tool registrations and serves fake services. */
+function fakeContext(services = {}) {
   const tools = new Map()
   const listeners = new Map()
   return {
@@ -35,13 +35,16 @@ function fakeContext() {
         tools.set(definition.name, definition)
         return () => tools.delete(definition.name)
       },
+      schemas() {
+        return ['read', 'grep', 'glob', 'bash', 'write', 'edit'].map(name => ({ name }))
+      },
     },
     on(event, handler) {
       listeners.set(event, handler)
       return () => listeners.delete(event)
     },
-    get() {
-      return undefined
+    get(key) {
+      return services[key]
     },
     logger: { info() {} },
     tools_registered: tools,
@@ -61,7 +64,7 @@ test('the module implements the host contract and compiles every tool schema', {
   const ctx = fakeContext()
   mod.apply(ctx, mod.Config({}))
 
-  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
+  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
   assert.deepEqual([...ctx.tools_registered.keys()].sort(), expected.sort())
   for (const [name, definition] of ctx.tools_registered) {
     assert.equal(typeof definition.output.render, 'function', `${name} must render`)
@@ -159,4 +162,104 @@ test('the turn-stopping reminder names the open gates', { skip }, async () => {
   injected = null
   await ctx.listeners.get('agent/turn-stopping')({ agent })
   assert.equal(injected, null, 'the same signature is not repeated')
+})
+
+test('drill_diff turns a branch diff into blast evidence with a proposed checklist', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync, writeFileSync } = await import('node:fs')
+  const repo = join(workspace, 'gitrepo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+  const base = git('rev-parse', 'HEAD')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() { let x = 1; }\n')
+  writeFileSync(join(repo, 'b.rs'), 'fn b() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'fix')
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false }))
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, { signal: new AbortController().signal, agent: { session: { id: 's-git', header: { cwd: repo } } } })
+
+  await call('drill_start', { task: 'git-drill', repo, base, issue: '1' })
+  const diff = await call('drill_diff', {})
+  assert.equal(diff.base, base)
+  assert.deepEqual(diff.changed.sort(), ['a.rs', 'b.rs'])
+  assert.equal(diff.recorded, true)
+  assert.ok(diff.checklist.length >= 4, 'a checklist line per changed file per concern')
+
+  const ledger = readFileSync(join(repo, '.drill', 'git-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const blast = ledger.find(e => e.kind === 'blast')
+  assert.ok(blast, 'the diff is recorded as blast evidence')
+  assert.deepEqual(blast.files.sort(), ['a.rs', 'b.rs'])
+  assert.match(blast.cmd, /--diff-filter=ACMR/)
+})
+
+test('drill_review drives the role file and binds the verdict to HEAD', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'reviewrepo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+  const head = git('rev-parse', 'HEAD')
+
+  let captured = null
+  const subagents = {
+    async start(provider, request) {
+      captured = { provider, request }
+      return {
+        id: 'child-1',
+        result: Promise.resolve({ stopReason: 'completed', structured: { verdict: 'PASS', blockers: [], unverified: [], summary: 'parity audit clean' } }),
+        async dispose() {},
+      }
+    },
+  }
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext({ subagents })
+  mod.apply(ctx, mod.Config({ reminder: false }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-rev', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'review-drill', repo, base: 'HEAD', issue: '2' })
+  const review = await call('drill_review', {})
+
+  assert.equal(review.verdict, 'PASS')
+  assert.equal(review.role, 'drill-auditor')
+  assert.equal(review.roleSource, 'bundled')
+  assert.equal(review.head, head)
+  assert.equal(captured.provider, 'spawn')
+  assert.match(captured.request.persona, /Read-only/, 'persona comes from the bundled role body')
+  assert.match(captured.request.persona, /drill-auditor|Review 2/)
+  assert.deepEqual(captured.request.toolFilter.allow, ['read', 'grep', 'glob', 'bash'], 'role tools minus nothing: all are visible')
+  assert.match(captured.request.prompt[0].text, new RegExp(head))
+  assert.equal(captured.request.outputSchema.properties.verdict.enum.join(','), 'PASS,FAIL')
+
+  const ledger = readFileSync(join(repo, '.drill', 'review-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const recorded = ledger.find(e => e.kind === 'review')
+  assert.equal(recorded.head, head)
+  assert.equal(recorded.role, 'drill-auditor')
+  assert.match(readFileSync(recorded.log, 'utf8'), /role: drill-auditor \(bundled\)/)
+})
+
+test('drill_review refuses to invent a verdict when the subagent service is absent', { skip }, async () => {
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false }))
+  await assert.rejects(
+    () => ctx.tools_registered.get('drill_review').execute({ task: 'x' }, exec),
+    /subagents service is not mounted/,
+  )
 })
