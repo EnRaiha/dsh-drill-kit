@@ -25,7 +25,7 @@ import { runCapture } from './lib/runner.js'
 import { callees as c2gCallees, callers as c2gCallers, dependentFiles, discoverDb, impact as c2gImpact, locateByFrame, locateByName } from './lib/c2g.js'
 import { branchName, diffFiles, headSha } from './lib/git.js'
 import { resolveRole, roleBudget, roleToolFilter } from './lib/role.js'
-import { definitionPattern, searchText } from './lib/search.js'
+import { DEFAULT_INDEX_DIR, definitionPattern, indexFor, indexRoot, resolveBin, resolveEngine, searchText } from './lib/search.js'
 
 export const name = 'dsh-drill'
 export const inject = ['tools']
@@ -48,6 +48,8 @@ export const Config = z.object({
   c2gDepth: z.number().min(1).max(10).step(1).default(3),
   rippleDepth: z.number().min(1).max(5).step(1).default(2),
   searchEngine: z.union(['auto', 'rg', 'tgrep']).default('auto'),
+  tgrepIndexDir: z.string().default(''),
+  autoIndex: z.boolean().default(false),
   rgBin: z.string().default('rg'),
   tgrepBin: z.string().default('tgrep'),
   searchMaxHits: z.number().min(1).step(1).default(200),
@@ -95,6 +97,39 @@ function c2gDb(repo, config) {
   } catch {
     return null
   }
+}
+
+/**
+ * Common text-search options: engine choice, binaries, and the out-of-tree
+ * tgrep index location (empty config means the default cache directory).
+ */
+function searchArgs(config, extra = {}) {
+  return {
+    engine: config.searchEngine,
+    rgBin: config.rgBin,
+    tgrepBin: config.tgrepBin,
+    indexDir: config.tgrepIndexDir && config.tgrepIndexDir.length > 0 ? config.tgrepIndexDir : DEFAULT_INDEX_DIR,
+    maxHits: config.searchMaxHits,
+    ...extra,
+  }
+}
+
+/**
+ * Run a text search, optionally building the out-of-tree tgrep index first.
+ *
+ * With `autoIndex` off this never writes: the search simply runs on ripgrep.
+ * With it on, a missing index is built once into the cache directory, so the
+ * worktree stays clean and later searches take the trigram path.
+ */
+function maybeIndex(root, config, run) {
+  if (!config.autoIndex) return run()
+  const baseDir = config.tgrepIndexDir && config.tgrepIndexDir.length > 0 ? config.tgrepIndexDir : DEFAULT_INDEX_DIR
+  if (indexFor(root, baseDir) !== null) return run()
+  if (resolveBin(config.tgrepBin) === null) return run()
+  const built = indexRoot({ root, baseDir, tgrepBin: config.tgrepBin })
+  const result = run()
+  if (built.ok) result.indexed = built.dir
+  return result
 }
 
 /** Read the active drill task recorded by `drill_start`, if any. */
@@ -184,7 +219,17 @@ export function apply(ctx, config) {
       writeFileSync(join(stateRoot, 'active.json'), `${JSON.stringify({ task: args.task, repo: args.repo ?? cwd, base: args.base ?? 'origin/main', issue: args.issue ?? null, startedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8')
       const { evaluation } = loadTask(stateRoot, args.task)
       const summary = summarize(evaluation)
-      return { task: args.task, dir: paths.dir, gates: summary.gates, next: summary.next }
+      // Advise which stage 1–2 engine will answer, without writing anything.
+      const repoRoot = args.repo !== undefined ? resolve(cwd, args.repo) : cwd
+      const c2gReady = c2gDb(repoRoot, config) !== null
+      const baseDir = config.tgrepIndexDir && config.tgrepIndexDir.length > 0 ? config.tgrepIndexDir : DEFAULT_INDEX_DIR
+      const tgrepReady = indexFor(repoRoot, baseDir) !== null
+      const coverage = c2gReady
+        ? 'stage 1–2: c2g cache covers this repo'
+        : tgrepReady
+          ? 'stage 1–2: no c2g cache, tgrep index ready (text-level)'
+          : 'stage 1–2: no c2g cache and no tgrep index — run drill_index to build one, otherwise searches scan with rg'
+      return { task: args.task, dir: paths.dir, gates: summary.gates, next: `${summary.next} · ${coverage}` }
     },
   })
 
@@ -235,14 +280,7 @@ export function apply(ctx, config) {
       // Text-level fallback: the graph has no answer (no cache, or the symbol is
       // not indexed), so search for definition-shaped lines and say so.
       if (rows.length === 0 && typeof args.symbol === 'string' && args.symbol.length > 0) {
-        const found = searchText({
-          pattern: definitionPattern(args.symbol),
-          root: repo,
-          engine: config.searchEngine,
-          rgBin: config.rgBin,
-          tgrepBin: config.tgrepBin,
-          maxHits: config.searchMaxHits,
-        })
+        const found = maybeIndex(repo, config, () => searchText(searchArgs(config, { pattern: definitionPattern(args.symbol), root: repo })))
         if (found.engine === null) throw new Error(`drill: no code2graph cache matches ${repo} and no text-search engine is available (${found.error})`)
         const hits = found.hits.map(h => `${h.file}:${h.line ?? '?'}`)
         const results = found.hits.map(h => `${args.symbol} [text] ${h.file}:${h.line ?? '?'} ${h.text.trim().slice(0, 90)}`)
@@ -323,16 +361,7 @@ export function apply(ctx, config) {
 
       // Text-level fallback: occurrence sites, explicitly not a resolved graph.
       if (db === null || callSites.length + transitive.length + called.length === 0) {
-        const found = searchText({
-          pattern: args.symbol,
-          root: repo,
-          word: true,
-          fixed: true,
-          engine: config.searchEngine,
-          rgBin: config.rgBin,
-          tgrepBin: config.tgrepBin,
-          maxHits: config.searchMaxHits,
-        })
+        const found = maybeIndex(repo, config, () => searchText(searchArgs(config, { pattern: args.symbol, root: repo, word: true, fixed: true })))
         if (found.engine === null) throw new Error(`drill: no code2graph answer for ${args.symbol} in ${repo} and no text-search engine is available (${found.error})`)
         const sites = found.hits.map(h => `${h.file}:${h.line ?? '?'}`)
         const files = [...new Set(found.hits.map(h => h.file))]
@@ -413,18 +442,15 @@ export function apply(ctx, config) {
       const active = readActive(stateRoot) ?? {}
       const repo = active.repo !== undefined ? resolve(String(active.repo)) : cwd
 
-      const found = searchText({
+      const found = maybeIndex(repo, config, () => searchText(searchArgs(config, {
         pattern: args.pattern,
         root: repo,
         glob: args.glob,
         fixed: args.fixed,
         word: args.word,
         ignoreCase: args.ignoreCase,
-        engine: config.searchEngine,
-        rgBin: config.rgBin,
-        tgrepBin: config.tgrepBin,
-        maxHits: args.maxHits ?? config.searchMaxHits,
-      })
+        ...(args.maxHits !== undefined ? { maxHits: args.maxHits } : {}),
+      })))
       if (found.engine === null) throw new Error(`drill: no text-search engine available (${found.error})`)
 
       const hits = found.hits.map(h => `${h.file}${h.line !== null ? `:${h.line}` : ''}${h.column !== null ? `:${h.column}` : ''} ${h.text.trim().slice(0, 160)}`)
@@ -456,6 +482,75 @@ export function apply(ctx, config) {
         truncated: found.truncated,
         recorded,
         note: found.error ?? (found.hits.length === 0 ? 'no hits' : ''),
+        gates: summary.gates,
+        next: summary.next,
+      }
+    },
+  })
+
+  tool({
+    name: 'drill_index',
+    description: 'Build or refresh the out-of-tree tgrep index for the drill repository (or a given root), so stage 1–2 text search runs on the trigram index instead of scanning. The index lives in a cache directory, never inside the worktree, so `git status` stays clean.',
+    parameters: {
+      root: { type: 'string', description: 'Root to index; defaults to the task repository.' },
+      force: { type: 'boolean', description: 'Rebuild from scratch instead of an incremental refresh.' },
+      task: { type: 'string', description: 'Task id; defaults to the active drill task.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ok: { type: 'boolean', required: true },
+          root: { type: 'string', required: true },
+          dir: { type: 'string', required: true },
+          files: { type: 'integer' },
+          trigrams: { type: 'integer' },
+          engine: { type: 'string' },
+          c2gCovered: { type: 'boolean' },
+          error: { type: 'string' },
+          gates: { type: 'array', items: { type: 'string' } },
+          next: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: value.ok
+          ? `tgrep index ready: ${value.files ?? '?'} files, ${value.trigrams ?? '?'} trigrams\nroot: ${value.root}\ndir:  ${value.dir}\nengine now: ${value.engine} (c2g covered: ${value.c2gCovered})${value.next ? `\nnext: ${value.next}` : ''}`
+          : `index failed: ${value.error}`,
+      }],
+    },
+    async execute(args, exec) {
+      const { cwd, stateRoot } = roots(exec, config)
+      const task = resolveTask(args, stateRoot)
+      const paths = taskPaths(stateRoot, task)
+      const active = readActive(stateRoot) ?? {}
+      const repo = args.root !== undefined ? resolve(cwd, args.root) : (active.repo !== undefined ? resolve(String(active.repo)) : cwd)
+      const baseDir = config.tgrepIndexDir && config.tgrepIndexDir.length > 0 ? config.tgrepIndexDir : DEFAULT_INDEX_DIR
+
+      const built = indexRoot({ root: repo, baseDir, tgrepBin: config.tgrepBin, force: args.force === true })
+      const c2gCovered = c2gDb(repo, config) !== null
+      const engine = resolveEngine({ engine: config.searchEngine, root: repo, rgBin: config.rgBin, tgrepBin: config.tgrepBin, indexDir: baseDir })?.engine ?? null
+
+      appendEntry(paths, {
+        task,
+        kind: 'note',
+        stage: 'localize',
+        text: built.ok ? `tgrep index ${built.dir}` : `tgrep index failed: ${built.error}`,
+        note: built.ok ? `${built.meta?.files ?? '?'} files, ${built.meta?.trigrams ?? '?'} trigrams, engine=${engine}, c2g=${c2gCovered}` : 'index build failed',
+        repo,
+      })
+      const { evaluation } = loadTask(stateRoot, task)
+      const summary = summarize(evaluation)
+      return {
+        ok: built.ok,
+        root: repo,
+        dir: built.dir,
+        ...(built.meta?.files !== null && built.meta?.files !== undefined ? { files: built.meta.files } : {}),
+        ...(built.meta?.trigrams !== null && built.meta?.trigrams !== undefined ? { trigrams: built.meta.trigrams } : {}),
+        ...(engine !== null ? { engine } : {}),
+        c2gCovered,
+        ...(built.error !== null ? { error: built.error } : {}),
         gates: summary.gates,
         next: summary.next,
       }

@@ -64,7 +64,7 @@ test('the module implements the host contract and compiles every tool schema', {
   const ctx = fakeContext()
   mod.apply(ctx, mod.Config({}))
 
-  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_search', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
+  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_search', 'drill_index', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
   assert.deepEqual([...ctx.tools_registered.keys()].sort(), expected.sort())
   for (const [name, definition] of ctx.tools_registered) {
     assert.equal(typeof definition.output.render, 'function', `${name} must render`)
@@ -310,4 +310,47 @@ test('stage 1–2 fall back to a labelled text search when no code graph covers 
   assert.equal(searched.engine, 'rg')
   assert.equal(searched.recorded, 'edge@edge')
   assert.ok(searched.hits.length >= 1)
+})
+
+test('drill_index builds an out-of-tree index that drill_search then uses', { skip }, async () => {
+  const { resolveBin } = await import('../lib/search.js')
+  if (resolveBin('tgrep') === null) return // tgrep is optional; the rg path is covered elsewhere
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync, existsSync } = await import('node:fs')
+  const repo = join(workspace, 'indexrepo')
+  const indexBase = join(workspace, 'tgrep-cache')
+  mkdirSync(join(repo, 'src'), { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'src', 'a.rs'), 'pub fn indexed_fn() -> u32 { 7 }\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, tgrepIndexDir: indexBase, searchEngine: 'auto' }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-idx', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'index-drill', repo, base: 'HEAD' })
+  const built = await call('drill_index', {})
+  assert.equal(built.ok, true, built.error ?? '')
+  assert.ok(built.dir.startsWith(indexBase), 'the index is written to the configured cache, not the repo')
+  assert.equal(existsSync(join(repo, '.tgrep')), false, 'the worktree gains no untracked files')
+  assert.ok(built.files >= 1)
+  assert.equal(built.engine, 'tgrep', 'search now runs on the trigram index')
+  // Coverage depends on the host's c2g caches (a cache indexed at a parent
+  // directory legitimately covers its subdirectories), so only its type is fixed.
+  assert.equal(typeof built.c2gCovered, 'boolean')
+
+  const searched = await call('drill_search', { pattern: 'indexed_fn', fixed: true })
+  assert.equal(searched.engine, 'tgrep')
+  assert.ok(searched.hits.length >= 1)
+
+  const found = await call('drill_locate', { symbol: 'indexed_fn' })
+  assert.equal(found.found, true)
+  assert.match(found.source, /tgrep/)
+  assert.match(found.source, /text-level/)
 })

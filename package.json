@@ -1,7 +1,7 @@
 {
   "name": "dsh-drill",
-  "version": "0.3.0",
-  "description": "Evidence-gated bug-fix drill for DeepSeek Harness: stage gates, plugin-run red/green proofs bound to a commit, c2g localization and blast radius, tgrep/rg text-search fallback, diff-derived blast evidence, and a role-driven Review 2 auditor.",
+  "version": "0.4.0",
+  "description": "Evidence-gated bug-fix drill for DeepSeek Harness: stage gates, plugin-run red/green proofs bound to a commit, c2g localization and blast radius with an out-of-tree tgrep index fallback, diff-derived blast evidence, and a role-driven Review 2 auditor.",
   "type": "module",
   "main": "./index.js",
   "exports": {

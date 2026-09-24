@@ -30,6 +30,7 @@ Built for the NodeDB drill (`red → green → fmt/clippy → preflight → comm
 | `drill_blast` | stage 2 over the same cache: call sites, transitive callers to a bounded depth, callees. Records `blast`. |
 | `drill_diff` | stage 2b from git: changed files against the base ref, deleted files, the files that depend on them (c2g reverse edges), and a proposed manual-test checklist. Records `blast`. |
 | `drill_search` | text search with `tgrep` (trigram index) or `rg`: for questions the graph cannot answer — a config key, an error string, a SQL fragment, a doc claim. Optionally records the hits as `locate`/`blast`/`edge` evidence, always labelled text-level. |
+| `drill_index` | build or refresh the **out-of-tree** tgrep index for the drill repository, so stages 1–2 stop scanning: the index lands in a cache directory, never inside the worktree, and `git status` stays clean. Records what it built. |
 | `drill_run` | run a command, stream output into `.drill/<task>/logs/`, hash the log, record the exit code **and the commit it ran on**. This is the only way to produce a test proof. |
 | `drill_record` | record non-command evidence: locate/blast/edge/review/pr/note |
 | `drill_gate` | which gates hold, which are open, and what the next step is |
@@ -81,7 +82,9 @@ Every key has a schema default; override by re-stating the row's whole config in
 | `sqliteBin` | `sqlite3` | sqlite3 executable used for read-only queries. |
 | `c2gDepth` | `3` | Default transitive-caller depth for `drill_blast`. |
 | `rippleDepth` | `2` | Default reverse-edge depth for `drill_diff` dependents. |
-| `searchEngine` | `auto` | `auto` picks `tgrep` when the root has a `.tgrep` index, otherwise `rg`; force with `rg` or `tgrep`. |
+| `searchEngine` | `auto` | `auto` picks `tgrep` when an index covers the root (out-of-tree cache first, then `<root>/.tgrep`), otherwise `rg`; force with `rg` or `tgrep`. |
+| `tgrepIndexDir` | `~/.cache/tgrep-index` | Where out-of-tree tgrep indexes live (one directory per root). |
+| `autoIndex` | `false` | When true, a missing index is built on the first search instead of falling back to rg. Off by default so a search never writes unexpectedly. |
 | `rgBin` | `rg` | ripgrep binary name or absolute path. |
 | `tgrepBin` | `tgrep` | tgrep binary name or absolute path; `~/.local/bin` and `~/.cargo/bin` are searched after `PATH`. |
 | `searchMaxHits` | `200` | Cap on returned hits; the result reports when it truncated. |
@@ -112,6 +115,16 @@ The graph is authoritative when it answers, but it does not always: a repository
 
 `auto` prefers tgrep only when the root actually carries an index — an unindexed tgrep run scans every file and writes a warning into the evidence log, which is worse than ripgrep. Both engines emit the same `--json` match stream, so one parser reads them.
 
+**Indexes live outside the repository.** A tgrep index normally sits at `<root>/.tgrep`, which would add untracked files to a drill worktree and surface in `git status` — exactly what the drill's own preflight checks look at. `drill_index` (and `autoIndex`) instead pass `--index-path`, writing to `~/.cache/tgrep-index/<root-slug>/`: measured at ~1.5 s and ~60 MB per NodeDB worktree, ~92 MB peak RAM, and the worktree gains nothing.
+
+`drill_start` reports which engine will answer, so the gap is visible before the first search:
+
+```
+stage 1–2: no c2g cache and no tgrep index — run drill_index to build one, otherwise searches scan with rg
+stage 1–2: no c2g cache, tgrep index ready (text-level)
+stage 1–2: c2g cache covers this repo
+```
+
 The fallback never pretends to be a graph: `drill_locate` searches for definition-shaped lines and says so, `drill_blast` reports **occurrences**, explicitly not resolved call sites, and nothing in the fallback path can produce a transitive `impact` list. A caller/callee claim still needs the graph or a read of the code.
 
 ## v0.2 changes
@@ -121,16 +134,17 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 - **Evidence is bound to a commit** — `drill_run` records `head` + `branch`; `drill_review` records `head`. The `review` gate reopens when HEAD moved after the review, and the report names the commit evidence belongs to (or lists the commits it spans).
 - **`lib/git.js`** — read-only git queries (`rev-parse HEAD`, branch, `diff --name-only`) that answer null/empty outside a repository instead of throwing.
 - **`drill_search` + `lib/search.js`** — tgrep/rg text search as the honest fallback for stages 1–2, with engine auto-selection and text-level labelling.
+- **`drill_index` + out-of-tree indexes** — `--index-path` support keeps the trigram index in `~/.cache/tgrep-index/`, so coverage is added without dirtying a worktree; `drill_start` names the engine that will answer; c2g discovery now picks the **most specific** matching cache root (with an active snapshot preferred), so a stale cache indexed at a parent directory cannot shadow the real one.
 
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 46 tests
+npm test        # node --test test/*.test.js — 52 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts
 - git/role: real repositories for `headSha`/`branchName`/`diffFiles` (including the non-repo path); frontmatter parsing, project→user→bundled precedence, tool-filter expansion, budget reading
-- search: binary resolution, engine auto-selection against an indexed vs unindexed root, ripgrep/tgrep JSON parsing, definition-shaped patterns, miss-vs-failure exit codes, unavailable-engine reporting
+- search: binary resolution, engine auto-selection against an indexed vs unindexed root, out-of-tree index build/read-back/root matching (including that no `.tgrep` appears inside the repo), ripgrep/tgrep JSON parsing, definition-shaped patterns, miss-vs-failure exit codes, unavailable-engine reporting
 - c2g: a synthetic cache exercises the SQL (JSON-encoded `kind`/`role`, line from the symbol blob, duplicate names across crates, read-only refusal)
 - integration: loads the real `@deepseek-ai/dsh-tools` runtime, compiles **every tool schema against the real DSL**, drives a whole drill (start → locate/blast/diff → red → green → hygiene → review → report), asserts the gates open in order, asserts the reviewer request carries the role persona/read-only filter/budget/commit, and asserts stages 1–2 fall back to a labelled text search on a repo with no code graph
 
