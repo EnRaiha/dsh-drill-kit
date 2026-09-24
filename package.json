@@ -1,0 +1,53 @@
+{
+  "name": "dsh-drill",
+  "version": "0.1.0",
+  "description": "Evidence-gated bug-fix drill for DeepSeek Harness: stage gates, plugin-run red/green proofs, c2g localization and blast radius, and a fresh-context Review 2 auditor.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "skills",
+    "roles",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+    "@deepseek-ai/dsh-llm": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+    "@deepseek-ai/dsh-subagent": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+    "@deepseek-ai/schemastery": ">=3.18.0 <4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-subagent": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22.19"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "drill",
+    "red-green",
+    "evidence",
+    "code2graph"
+  ],
+  "license": "MIT"
+}

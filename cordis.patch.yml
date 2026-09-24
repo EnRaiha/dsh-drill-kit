@@ -1,0 +1,8 @@
+# dsh-drill bundle patch: one row, everything downstream of it is a tool.
+#
+# Config is omitted on purpose: every key has a Schema default in index.js, and a
+# patch replaces a row's WHOLE config, so an override below must restate the keys
+# it needs.
+- insert:
+    - id: drill
+      name: dsh-drill
