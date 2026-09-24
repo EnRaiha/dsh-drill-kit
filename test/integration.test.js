@@ -64,7 +64,7 @@ test('the module implements the host contract and compiles every tool schema', {
   const ctx = fakeContext()
   mod.apply(ctx, mod.Config({}))
 
-  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
+  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_search', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
   assert.deepEqual([...ctx.tools_registered.keys()].sort(), expected.sort())
   for (const [name, definition] of ctx.tools_registered) {
     assert.equal(typeof definition.output.render, 'function', `${name} must render`)
@@ -262,4 +262,52 @@ test('drill_review refuses to invent a verdict when the subagent service is abse
     () => ctx.tools_registered.get('drill_review').execute({ task: 'x' }, exec),
     /subagents service is not mounted/,
   )
+})
+
+test('stage 1–2 fall back to a labelled text search when no code graph covers the repo', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'nosearch-graph')
+  mkdirSync(join(repo, 'src'), { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'src', 'a.rs'), 'pub fn target_fn(x: u32) -> u32 {\n    x + 1\n}\n')
+  writeFileSync(join(repo, 'src', 'b.rs'), 'use crate::a::target_fn;\n\nfn caller() { let _ = target_fn(1); }\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-fb', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'fallback', repo, base: 'HEAD' })
+
+  const located = await call('drill_locate', { symbol: 'target_fn' })
+  assert.equal(located.found, true, 'the text fallback must still answer')
+  assert.match(located.source, /text-level/)
+  assert.match(located.results[0], /target_fn/)
+  assert.match(located.results[0], /src\/a\.rs:1/)
+
+  let ledger = readFileSync(join(repo, '.drill', 'fallback', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const locate = ledger.find(e => e.kind === 'locate')
+  assert.match(locate.note, /text-level/)
+  assert.equal(locate.files.length > 0, true)
+
+  const blast = await call('drill_blast', { symbol: 'target_fn' })
+  assert.ok(blast.callers.length >= 3, 'definition, import and call site show up as occurrences')
+  assert.ok(blast.fileCount >= 2)
+  assert.equal(blast.impact.length, 0, 'no resolved transitive callers without a graph')
+
+  ledger = readFileSync(join(repo, '.drill', 'fallback', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const blastRecord = ledger.filter(e => e.kind === 'blast').at(-1)
+  assert.match(blastRecord.note, /text-level: occurrences, not resolved call sites/)
+
+  const searched = await call('drill_search', { pattern: 'caller', kind: 'edge', fixed: true })
+  assert.equal(searched.engine, 'rg')
+  assert.equal(searched.recorded, 'edge@edge')
+  assert.ok(searched.hits.length >= 1)
 })

@@ -21,7 +21,7 @@ Kalau kerja itu penerokaan atau spike, **jangan** guna drill — tak ada gate ya
 
 | # | Fasa | Rekod yang wajib | Tool |
 |---|---|---|---|
-| 1 | **Localize** — cari tapak sebenar dari stack trace/log | `drill_record kind=locate` dengan `files` (path:line) | `drill_locate` (c2g) |
+| 1 | **Localize** — cari tapak sebenar dari stack trace/log | `drill_record kind=locate` dengan `files` (path:line) | `drill_locate` (c2g → tgrep/rg fallback) + `drill_search` |
 | 2 | **Blast radius** — pemanggil, callee, jenis terjejas | `drill_record kind=blast` dengan `files`/`symbols` | `drill_blast` (symbol) + `drill_diff` (fail berubah + dependent) |
 | 3 | **Edge cases** — invarian yang mesti gagal | `drill_record kind=edge` dengan `text` | fikir, senaraikan (checklist dari `drill_diff` sebagai input) |
 | 4 | **Patch** — red dulu, baru hijau | `drill_run arm=base` (mesti **exit ≠ 0**), kemudian `drill_run arm=fix` (mesti exit 0) | `nodedb-cargo.sh` |
@@ -49,7 +49,8 @@ drill_report  task=issue296            # tulis .drill/issue296/report.md
 4. **Jangan lapor siap semasa gate terbuka.** Panggil `drill_gate`; kalau `ready=false`, sebut gate mana yang tinggal, jangan ganti dengan ayat "should work".
 5. **Review 2 dalam sesi segar, ikut role file.** Auditor tak boleh jadi penulis kod. `drill_review` baca role `drill-auditor` (project `.dsh/roles` → `~/.dsh/roles` → bundled), jadi persona, tool policy (read-only) dan budget datang dari fail, bukan dari ingatan.
 6. **Satu issue satu PR.** Badan PR: defect + fix + cara uji + bukti regresi. `Fixes #<n>`. Nombor issue tak muncul dalam kod atau mesej commit.
-7. **Env repo dihormati.** Guna `~/scripts/nodedb-cargo.sh <worktree> …` (target per-worktree, sccache, `RUST_MIN_STACK`), bukan `cargo` kosong.
+7. **Fallback teks dilabel, bukan diganti.** Kalau c2g tak jawab, `drill_locate`/`drill_blast` guna tgrep (`auto` pilih dia kalau ada `.tgrep/`) atau rg, dan tulis `text-level` dalam rekod — itu *occurrence*, bukan call site. Jangan dakwa "caller" dari hasil teks.
+8. **Env repo dihormati.** Guna `~/scripts/nodedb-cargo.sh <worktree> …` (target per-worktree, sccache, `RUST_MIN_STACK`), bukan `cargo` kosong.
 
 ## Bentuk laporan
 

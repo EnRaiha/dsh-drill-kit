@@ -25,6 +25,7 @@ import { runCapture } from './lib/runner.js'
 import { callees as c2gCallees, callers as c2gCallers, dependentFiles, discoverDb, impact as c2gImpact, locateByFrame, locateByName } from './lib/c2g.js'
 import { branchName, diffFiles, headSha } from './lib/git.js'
 import { resolveRole, roleBudget, roleToolFilter } from './lib/role.js'
+import { definitionPattern, searchText } from './lib/search.js'
 
 export const name = 'dsh-drill'
 export const inject = ['tools']
@@ -46,6 +47,10 @@ export const Config = z.object({
   sqliteBin: z.string().default('sqlite3'),
   c2gDepth: z.number().min(1).max(10).step(1).default(3),
   rippleDepth: z.number().min(1).max(5).step(1).default(2),
+  searchEngine: z.union(['auto', 'rg', 'tgrep']).default('auto'),
+  rgBin: z.string().default('rg'),
+  tgrepBin: z.string().default('tgrep'),
+  searchMaxHits: z.number().min(1).step(1).default(200),
 })
 
 const REVIEW_SCHEMA = {
@@ -213,16 +218,46 @@ export function apply(ctx, config) {
       const active = readActive(stateRoot) ?? {}
       const repo = active.repo ?? cwd
       const db = c2gDb(repo, config)
-      if (db === null) throw new Error(`drill: no code2graph cache matches ${repo} — index the repo with c2g first, or record the finding with drill_record`)
 
       let rows = []
-      if (typeof args.symbol === 'string' && args.symbol.length > 0) {
-        rows = locateByName(db, args.symbol, { file: args.file })
-      } else if (typeof args.file === 'string' && Number.isInteger(args.line)) {
-        const hit = locateByFrame(db, args.file, args.line)
-        rows = hit ? [hit] : []
-      } else {
+      if (db !== null) {
+        if (typeof args.symbol === 'string' && args.symbol.length > 0) {
+          rows = locateByName(db, args.symbol, { file: args.file })
+        } else if (typeof args.file === 'string' && Number.isInteger(args.line)) {
+          const hit = locateByFrame(db, args.file, args.line)
+          rows = hit ? [hit] : []
+        }
+      }
+      if (db === null && !(typeof args.symbol === 'string' && args.symbol.length > 0) && !(typeof args.file === 'string' && Number.isInteger(args.line))) {
         throw new Error('drill: pass `symbol`, or `file` plus `line`')
+      }
+
+      // Text-level fallback: the graph has no answer (no cache, or the symbol is
+      // not indexed), so search for definition-shaped lines and say so.
+      if (rows.length === 0 && typeof args.symbol === 'string' && args.symbol.length > 0) {
+        const found = searchText({
+          pattern: definitionPattern(args.symbol),
+          root: repo,
+          engine: config.searchEngine,
+          rgBin: config.rgBin,
+          tgrepBin: config.tgrepBin,
+          maxHits: config.searchMaxHits,
+        })
+        if (found.engine === null) throw new Error(`drill: no code2graph cache matches ${repo} and no text-search engine is available (${found.error})`)
+        const hits = found.hits.map(h => `${h.file}:${h.line ?? '?'}`)
+        const results = found.hits.map(h => `${args.symbol} [text] ${h.file}:${h.line ?? '?'} ${h.text.trim().slice(0, 90)}`)
+        appendEntry(paths, {
+          task,
+          kind: 'locate',
+          stage: 'localize',
+          cmd: `${found.engine} -n '${definitionPattern(args.symbol)}' ${repo}`,
+          ...(hits.length > 0 ? { files: hits } : {}),
+          text: hits.length > 0 ? `text-level candidates: ${hits.slice(0, 10).join(', ')}`.slice(0, 500) : `no definition-shaped line for ${args.symbol}`,
+          note: 'text-level (no code2graph answer) — confirm the site before treating it as the definition',
+        })
+        const { evaluation } = loadTask(stateRoot, task)
+        const summary = summarize(evaluation)
+        return { found: hits.length > 0, results, source: `${found.engine} ${found.bin} (text-level)`, gates: summary.gates, next: summary.next }
       }
 
       const results = rows.map(r => `${r.name} [${r.kind}] ${r.file}:${r.line}`)
@@ -275,12 +310,46 @@ export function apply(ctx, config) {
       const active = readActive(stateRoot) ?? {}
       const repo = active.repo ?? cwd
       const db = c2gDb(repo, config)
-      if (db === null) throw new Error(`drill: no code2graph cache matches ${repo} — index the repo with c2g first, or record the finding with drill_record`)
 
       const opts = { file: args.file, limit: 40 }
-      const callSites = c2gCallers(db, args.symbol, opts)
-      const transitive = c2gImpact(db, args.symbol, { ...opts, depth: args.depth ?? config.c2gDepth, limit: 60 })
-      const called = c2gCallees(db, args.symbol, opts)
+      let callSites = []
+      let transitive = []
+      let called = []
+      if (db !== null) {
+        callSites = c2gCallers(db, args.symbol, opts)
+        transitive = c2gImpact(db, args.symbol, { ...opts, depth: args.depth ?? config.c2gDepth, limit: 60 })
+        called = c2gCallees(db, args.symbol, opts)
+      }
+
+      // Text-level fallback: occurrence sites, explicitly not a resolved graph.
+      if (db === null || callSites.length + transitive.length + called.length === 0) {
+        const found = searchText({
+          pattern: args.symbol,
+          root: repo,
+          word: true,
+          fixed: true,
+          engine: config.searchEngine,
+          rgBin: config.rgBin,
+          tgrepBin: config.tgrepBin,
+          maxHits: config.searchMaxHits,
+        })
+        if (found.engine === null) throw new Error(`drill: no code2graph answer for ${args.symbol} in ${repo} and no text-search engine is available (${found.error})`)
+        const sites = found.hits.map(h => `${h.file}:${h.line ?? '?'}`)
+        const files = [...new Set(found.hits.map(h => h.file))]
+        appendEntry(paths, {
+          task,
+          kind: 'blast',
+          stage: 'blast',
+          cmd: `${found.engine} -w -F '${args.symbol}' ${repo}`,
+          symbols: [args.symbol],
+          files,
+          text: `${sites.length} text occurrences in ${files.length} files`.slice(0, 500),
+          note: 'text-level: occurrences, not resolved call sites — a caller/callee claim still needs the graph or a read of the code',
+        })
+        const { evaluation } = loadTask(stateRoot, task)
+        const summary = summarize(evaluation)
+        return { symbol: args.symbol, callers: sites, impact: [], callees: [], fileCount: files.length, gates: summary.gates, next: summary.next }
+      }
 
       const callerLines = callSites.map(r => `${r.caller} ${r.occurrence_file}:${r.occurrence_line}`)
       const impactLines = transitive.map(r => `d${r.depth} ${r.caller} ${r.caller_file}:${r.line}`)
@@ -299,6 +368,97 @@ export function apply(ctx, config) {
       const { evaluation } = loadTask(stateRoot, task)
       const summary = summarize(evaluation)
       return { symbol: args.symbol, callers: callerLines, impact: impactLines, callees: calleeLines, fileCount: files.length, gates: summary.gates, next: summary.next }
+    },
+  })
+
+  tool({
+    name: 'drill_search',
+    description: 'Text search over the drill repository with ripgrep or tgrep (trigram index), used when the code graph has no answer or when the question is not about a symbol — a config key, an error string, a SQL fragment, a doc claim. Records the hits as `locate` or `blast` evidence when asked, always labelled text-level.',
+    parameters: {
+      pattern: { type: 'string', required: true, description: 'Regex pattern, or a literal when `fixed` is true.' },
+      glob: { type: 'string', description: 'Glob filter, e.g. "*.rs" or "nodedb-sql/**".' },
+      fixed: { type: 'boolean', description: 'Treat the pattern as a literal string.' },
+      word: { type: 'boolean', description: 'Match whole words only.' },
+      ignoreCase: { type: 'boolean', description: 'Case-insensitive matching.' },
+      kind: { type: 'string', enum: ['none', 'locate', 'blast', 'edge'], description: 'Record the hits as this evidence kind; default none (search only).' },
+      stage: { type: 'string', enum: STAGES, description: 'Stage for the recorded evidence; derived from `kind` when omitted.' },
+      task: { type: 'string', description: 'Task id; defaults to the active drill task.' },
+      maxHits: { type: 'integer', description: 'Cap on returned hits; defaults to the row configuration.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          engine: { type: 'string', required: true },
+          bin: { type: 'string', required: true },
+          hits: { type: 'array', items: { type: 'string' } },
+          files: { type: 'array', items: { type: 'string' } },
+          truncated: { type: 'boolean' },
+          recorded: { type: 'string' },
+          note: { type: 'string' },
+          gates: { type: 'array', items: { type: 'string' } },
+          next: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `${value.engine} (${value.bin}) — ${value.hits.length} hits in ${value.files.length} files${value.truncated ? ' (truncated)' : ''}\n${value.hits.slice(0, 40).join('\n') || '- none'}${value.recorded ? `\nrecorded as: ${value.recorded}` : ''}${value.note ? `\nnote: ${value.note}` : ''}\ngates: ${value.gates.join(' ')}\nnext: ${value.next}`,
+      }],
+    },
+    async execute(args, exec) {
+      const { cwd, stateRoot } = roots(exec, config)
+      const task = resolveTask(args, stateRoot)
+      const paths = taskPaths(stateRoot, task)
+      const active = readActive(stateRoot) ?? {}
+      const repo = active.repo !== undefined ? resolve(String(active.repo)) : cwd
+
+      const found = searchText({
+        pattern: args.pattern,
+        root: repo,
+        glob: args.glob,
+        fixed: args.fixed,
+        word: args.word,
+        ignoreCase: args.ignoreCase,
+        engine: config.searchEngine,
+        rgBin: config.rgBin,
+        tgrepBin: config.tgrepBin,
+        maxHits: args.maxHits ?? config.searchMaxHits,
+      })
+      if (found.engine === null) throw new Error(`drill: no text-search engine available (${found.error})`)
+
+      const hits = found.hits.map(h => `${h.file}${h.line !== null ? `:${h.line}` : ''}${h.column !== null ? `:${h.column}` : ''} ${h.text.trim().slice(0, 160)}`)
+      const files = [...new Set(found.hits.map(h => h.file))]
+      const kind = args.kind ?? 'none'
+      const stage = args.stage ?? (kind === 'locate' ? 'localize' : kind === 'blast' ? 'blast' : kind === 'edge' ? 'edge' : 'localize')
+
+      let recorded = ''
+      if (kind !== 'none') {
+        appendEntry(paths, {
+          task,
+          kind,
+          stage,
+          cmd: `${found.engine} ${args.fixed ? '-F ' : ''}${args.word ? '-w ' : ''}'${args.pattern}'${args.glob ? ` --glob '${args.glob}'` : ''} ${repo}`,
+          ...(files.length > 0 ? { files } : {}),
+          text: hits.slice(0, 8).join(' | ').slice(0, 500) || `no hits for ${args.pattern}`,
+          note: 'text-level search evidence',
+        })
+        recorded = `${kind}@${stage}`
+      }
+
+      const { evaluation } = loadTask(stateRoot, task)
+      const summary = summarize(evaluation)
+      return {
+        engine: found.engine,
+        bin: found.bin,
+        hits,
+        files,
+        truncated: found.truncated,
+        recorded,
+        note: found.error ?? (found.hits.length === 0 ? 'no hits' : ''),
+        gates: summary.gates,
+        next: summary.next,
+      }
     },
   })
 
