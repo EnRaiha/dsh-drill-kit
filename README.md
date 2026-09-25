@@ -190,7 +190,7 @@ Every `test`/`hygiene` record carries `exit`, `sha256` of its log, and the `head
 
 ## Search engines (stage 1–2 fallback)
 
-**Which "c2g"?** Three different things share the name: the upstream extractor is **farhan-syah's `NodeDB-Lab/code2graph`** (the `c2g` binary, called only as a last resort); the **per-project cache** `~/.cache/code2graph/projects/<key>/cache.sqlite3` is layer 1 below; and **`~/Embed/c2g`** is this machine's merged store, built by `~/scripts/merge_c2g_shards.py`, layer 2.
+**Which "c2g"?** Three different things share the name: the upstream extractor is **[farhan-syah](https://github.com/farhan-syah)'s [`NodeDB-Lab/code2graph`](https://github.com/NodeDB-Lab/code2graph)** (the `c2g` binary, called only as a last resort); the **per-project cache** `~/.cache/code2graph/projects/<key>/cache.sqlite3` is layer 1 below; and **`~/Embed/c2g`** is this machine's merged store, built by `~/scripts/merge_c2g_shards.py`, layer 2.
 
 The graph is authoritative when it answers, but it does not always: a repository may have no c2g cache, the symbol may not be indexed, or the question may not be about a symbol at all. Three layers, chosen per call and always named in the evidence:
 

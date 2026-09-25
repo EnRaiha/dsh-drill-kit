@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.2**, source revision `4ed319056921` on branch `master`, tree clean (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.2**, source revision `4ed319056921` on branch `master`, tree DIRTY (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | `.gitignore` | 4 | 28 | `1adbb37be33001da` | — |
 | `LICENSE` | 22 | 1064 | `2f841f07845b05a9` | — |
-| `README.md` | 330 | 31911 | `419d9db73dde2e0c` | — |
+| `README.md` | 330 | 31989 | `d67760407102f2d3` | — |
 | `cordis.patch.yml` | 9 | 300 | `7b935022f8a8569a` | — |
 | `core/README.md` | 39 | 2842 | `63a0a42187d0161a` | — |
 | `core/c2g_tools.py` | 674 | 26464 | `bc13afe99510c89e` | — |
@@ -113,7 +113,7 @@ SOFTWARE.
 
 ## `README.md`
 
-sha256 `419d9db73dde2e0c14e69d047c5fb23a6cf2912dc3a65de1a04a920e05ae2778` · 330 lines
+sha256 `d67760407102f2d306c0c9dc57bf94d7e3c606fae8241a98ff6aedba03652908` · 330 lines
 
 ````markdown
 # The drill kit
@@ -308,7 +308,7 @@ Every `test`/`hygiene` record carries `exit`, `sha256` of its log, and the `head
 
 ## Search engines (stage 1–2 fallback)
 
-**Which "c2g"?** Three different things share the name: the upstream extractor is **farhan-syah's `NodeDB-Lab/code2graph`** (the `c2g` binary, called only as a last resort); the **per-project cache** `~/.cache/code2graph/projects/<key>/cache.sqlite3` is layer 1 below; and **`~/Embed/c2g`** is this machine's merged store, built by `~/scripts/merge_c2g_shards.py`, layer 2.
+**Which "c2g"?** Three different things share the name: the upstream extractor is **[farhan-syah](https://github.com/farhan-syah)'s [`NodeDB-Lab/code2graph`](https://github.com/NodeDB-Lab/code2graph)** (the `c2g` binary, called only as a last resort); the **per-project cache** `~/.cache/code2graph/projects/<key>/cache.sqlite3` is layer 1 below; and **`~/Embed/c2g`** is this machine's merged store, built by `~/scripts/merge_c2g_shards.py`, layer 2.
 
 The graph is authoritative when it answers, but it does not always: a repository may have no c2g cache, the symbol may not be indexed, or the question may not be about a symbol at all. Three layers, chosen per call and always named in the evidence:
 
