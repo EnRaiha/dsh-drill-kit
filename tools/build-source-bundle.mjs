@@ -34,7 +34,9 @@ const sha = p => createHash('sha256').update(readFileSync(join(repo, p))).digest
 const lines = p => readFileSync(join(repo, p), 'utf8').split('\n').length
 const declaredTests = p => readFileSync(join(repo, p), 'utf8').split('\n').filter(l => l.startsWith('test(')).length
 
-const commit = git('rev-parse', 'HEAD')
+// Record the revision that last touched the *sources*, not HEAD: committing the
+// bundle moves HEAD, which would make every regeneration differ by construction.
+const commit = git('log', '-1', '--format=%H', '--', '.', ':(exclude)docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md')
 const branch = git('branch', '--show-current')
 // The bundle is a generated artifact that lives in the repo, so it always shows up
 // as dirty while being regenerated. Ignore its own path when judging the tree, or
@@ -61,7 +63,7 @@ const lang = p => p.endsWith('.js') || p.endsWith('.mjs') ? 'javascript'
 
 const head = `# dsh-drill-kit — complete source bundle for review
 
-*Revision: **v${version}**, commit \`${commit.slice(0, 12)}\` on branch \`${branch}\`, tree ${dirty === '' ? 'clean' : 'DIRTY'}. Generated ${date}. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v${version}**, source revision \`${commit.slice(0, 12)}\` on branch \`${branch}\`, tree ${dirty === '' ? 'clean' : 'DIRTY'} (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated ${date}. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives \`index.js\` cannot judge the twelve \`lib/*.js\` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 

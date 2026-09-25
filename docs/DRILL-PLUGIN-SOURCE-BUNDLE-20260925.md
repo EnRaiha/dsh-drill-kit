@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.2**, commit `53984593eb64` on branch `master`, tree clean. Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.2**, source revision `53984593eb64` on branch `master`, tree DIRTY (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -46,7 +46,7 @@
 | `package.json` | 55 | 1556 | `e483aa6b560b4599` | — |
 | `roles/drill-auditor.md` | 55 | 3019 | `107e089732dc1579` | — |
 | `skills/drill/SKILL.md` | 68 | 5524 | `5b4c9a06a6dc254b` | — |
-| `tools/build-source-bundle.mjs` | 96 | 5056 | `b81b3854dff97fa0` | — |
+| `tools/build-source-bundle.mjs` | 98 | 5401 | `7bc478d7e6669192` | — |
 | `test/c2g.test.js` | 162 | 9940 | `eda73b53ef16bf61` | 13 |
 | `test/cache.test.js` | 218 | 11674 | `4fbd474745ef55fe` | 9 |
 | `test/core.test.js` | 266 | 14119 | `d71387054522f89d` | 16 |
@@ -57,7 +57,7 @@
 | `test/pr.test.js` | 86 | 4971 | `c0155d628f1b8e4d` | 6 |
 | `test/search.test.js` | 135 | 6629 | `bf1a0d746a4b8c32` | 11 |
 
-**Totals:** 9408 lines across 48 files; 103 tests declared across 9 test files.
+**Totals:** 9410 lines across 48 files; 103 tests declared across 9 test files.
 
 ## The test run, recorded
 
@@ -7483,7 +7483,7 @@ drill_report  task=issue296            # tulis .drill/issue296/report.md
 
 ## `tools/build-source-bundle.mjs`
 
-sha256 `b81b3854dff97fa0e738aa7dade1042833b357731eab1e41ddaf4ee0e5299a97` · 96 lines
+sha256 `7bc478d7e66691927b554f4eedcebfc4595507ab543beb074e06cfc21a783295` · 98 lines
 
 ````javascript
 #!/usr/bin/env node
@@ -7522,7 +7522,9 @@ const sha = p => createHash('sha256').update(readFileSync(join(repo, p))).digest
 const lines = p => readFileSync(join(repo, p), 'utf8').split('\n').length
 const declaredTests = p => readFileSync(join(repo, p), 'utf8').split('\n').filter(l => l.startsWith('test(')).length
 
-const commit = git('rev-parse', 'HEAD')
+// Record the revision that last touched the *sources*, not HEAD: committing the
+// bundle moves HEAD, which would make every regeneration differ by construction.
+const commit = git('log', '-1', '--format=%H', '--', '.', ':(exclude)docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md')
 const branch = git('branch', '--show-current')
 // The bundle is a generated artifact that lives in the repo, so it always shows up
 // as dirty while being regenerated. Ignore its own path when judging the tree, or
@@ -7549,7 +7551,7 @@ const lang = p => p.endsWith('.js') || p.endsWith('.mjs') ? 'javascript'
 
 const head = `# dsh-drill-kit — complete source bundle for review
 
-*Revision: **v${version}**, commit \`${commit.slice(0, 12)}\` on branch \`${branch}\`, tree ${dirty === '' ? 'clean' : 'DIRTY'}. Generated ${date}. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v${version}**, source revision \`${commit.slice(0, 12)}\` on branch \`${branch}\`, tree ${dirty === '' ? 'clean' : 'DIRTY'} (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated ${date}. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives \`index.js\` cannot judge the twelve \`lib/*.js\` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
