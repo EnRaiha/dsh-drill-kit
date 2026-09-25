@@ -416,6 +416,7 @@ test('drill_error resolves a panic through the c2g cache and records it as locat
     INSERT INTO active_snapshots VALUES ('scope', 1, 1);
     INSERT INTO graph_symbols VALUES
       (1, 1, x'01', 'a', 'nextval_batch', 'nodedb/src/control/sequence/registry.rs', 200, 260, '"Function"', '{"line":227}');
+    PRAGMA user_version = 3;
   ` })
   const panic = `thread 'main' panicked at nodedb/src/control/sequence/registry.rs:227:5:
 called \`Option::unwrap()\` on a \`None\` value
@@ -446,6 +447,13 @@ called \`Option::unwrap()\` on a \`None\` value
   assert.match(locate.note, /repository frame\(s\)/)
   const { evaluate } = await import('../lib/gates.js')
   assert.ok(evaluate(ledger).gates.some(g => g.id === 'localize' && g.ok), 'the frames close the localize gate')
+
+  // The c2g-backed locate records which cache schema answered: layer 1 is the
+  // upstream CLI's format, so a version bump must be visible in the evidence.
+  const located = await call('drill_locate', { symbol: 'nextval_batch' })
+  assert.match(located.source, /c2g/)
+  const c2gLocate = readFileSync(join(repo, '.drill', 'panic-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.kind === 'locate').at(-1)
+  assert.match(c2gLocate.note, /c2g cache schema v3/, 'the note names the cache schema version')
 })
 
 test('drill_pr writes the body, lints it, and only records a clean one', { skip }, async () => {

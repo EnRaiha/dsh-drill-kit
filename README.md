@@ -195,8 +195,9 @@ Everything the plugin can rebuild lives under one root — `~/.cache/dsh-drill` 
   tgrep/<root-slug>/      # out-of-tree trigram indexes
 ```
 
-**One week idle time to live.** Two rules keep it honest:
+**One week idle time to live.** Three rules keep it honest:
 
+- **The c2g cache schema version is re-read on every hit**, not just when the entry was written: one `PRAGMA user_version` query (~2 ms) per answer. Our stages read specific tables (`graph_symbols`, `graph_edges`, `active_snapshots`), so if upstream bumps the cache schema, every c2g-backed record carries `c2g cache schema v4, expected v3 — upstream changed the cache format; verify these queries before trusting the result` instead of quietly reporting a graph it no longer understands. Reading it on the hit is what keeps the drift from hiding behind the seven-day TTL.
 - The TTL measures **idleness, not age**: a lookup touches the entry it used, so an index for a worktree still being drilled survives and one abandoned for a week is removed. `prune` runs whenever `drill_index` builds, and `drill_cache prune` runs it on demand. `cacheTtlDays: 0` disables expiry.
 - A cached answer is re-validated on read: the database file must still exist, and the entry must carry a snapshot id. Coverage means *can answer* — a c2g cache without an active scope snapshot (for example one rooted at a home directory, or a `/tmp` fixture) is not a candidate, because every query resolves through that snapshot. `drill_start` therefore reports the engine that will actually answer.
 
@@ -225,7 +226,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 83 tests
+npm test        # node --test test/*.test.js — 87 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts

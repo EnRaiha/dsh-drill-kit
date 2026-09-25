@@ -22,7 +22,7 @@ import { STAGES, appendEntry, readLedger, taskPaths, writeReport } from './lib/l
 import { evaluate, gateTable } from './lib/gates.js'
 import { renderReport } from './lib/report.js'
 import { runCapture } from './lib/runner.js'
-import { callees as c2gCallees, callers as c2gCallers, dependentFiles, discoverDb, impact as c2gImpact, locateByFrame, locateByName } from './lib/c2g.js'
+import { C2G_SCHEMA_VERSION, callees as c2gCallees, callers as c2gCallers, dependentFiles, discoverDb, impact as c2gImpact, locateByFrame, locateByName } from './lib/c2g.js'
 import { branchName, diffFiles, headSha } from './lib/git.js'
 import { resolveRole, roleBudget, roleToolFilter } from './lib/role.js'
 import { DEFAULT_INDEX_DIR, definitionPattern, indexFor, indexRoot, indexesSize, legacyIndexDir, pruneIndexes, resolveBin, resolveEngine, searchText } from './lib/search.js'
@@ -112,17 +112,38 @@ function roots(exec, config) {
 }
 
 /** Discover the c2g cache database for a repository, or null when unavailable. */
-function c2gDb(repo, config) {
+function c2gInfo(repo, config) {
   if (!config.c2gEnabled) return null
   try {
     const options = { cacheDir: drillCacheDir(config), ttlMs: cacheTtlMs(config) }
     const found = config.c2gCacheDir && config.c2gCacheDir.length > 0
       ? discoverDb(repo, config.c2gCacheDir, config.sqliteBin, options)
       : discoverDb(repo, undefined, config.sqliteBin, options)
-    return found?.db ?? null
+    return found === null ? null : { db: found.db, schemaVersion: found.schemaVersion ?? null }
   } catch {
     return null
   }
+}
+
+/** Just the database path, for call sites that only need the handle. */
+function c2gDb(repo, config) {
+  return c2gInfo(repo, config)?.db ?? null
+}
+
+/**
+ * The note every c2g-backed record carries: which database answered, at which
+ * cache schema. The per-project cache is the upstream CLI's format
+ * (`cli/src/cache/schema.rs`, SCHEMA_VERSION 3), so a bump upstream can break
+ * these queries silently — record the version, and say so when it moved.
+ */
+function c2gNote(info) {
+  if (info === null) return ''
+  const version = info.schemaVersion
+  if (version === null) return `c2g cache ${info.db} (schema version unreadable)`
+  if (version !== C2G_SCHEMA_VERSION) {
+    return `c2g cache schema v${version}, expected v${C2G_SCHEMA_VERSION} — upstream changed the cache format; verify these queries before trusting the result`
+  }
+  return `c2g cache schema v${version}`
 }
 
 /** The drill cache root in use: `cacheDir` config, else the default cache root. */
@@ -346,7 +367,8 @@ export function apply(ctx, config) {
       const paths = taskPaths(stateRoot, task)
       const active = readActive(stateRoot) ?? {}
       const repo = active.repo ?? cwd
-      const db = c2gDb(repo, config)
+      const info = c2gInfo(repo, config)
+      const db = info?.db ?? null
 
       let rows = []
       if (db !== null) {
@@ -414,6 +436,7 @@ export function apply(ctx, config) {
         kind: 'locate',
         stage: 'localize',
         cmd: typeof args.symbol === 'string' && args.symbol.length > 0 ? `c2g locate name=${args.symbol}` : `c2g locate frame=${args.file}:${args.line}`,
+        ...(rows.length > 0 ? { note: c2gNote(info) } : {}),
         ...(rows.length > 0 ? { files: rows.map(r => `${r.file}:${r.line}`), text: results.join('; ').slice(0, 500) } : {}),
         ...(rows.length === 0 ? { note: 'c2g indexed the file but no symbol contains that line' } : {}),
       })
@@ -457,7 +480,8 @@ export function apply(ctx, config) {
       const paths = taskPaths(stateRoot, task)
       const active = readActive(stateRoot) ?? {}
       const repo = active.repo ?? cwd
-      const db = c2gDb(repo, config)
+      const info = c2gInfo(repo, config)
+      const db = info?.db ?? null
 
       const opts = { file: args.file, limit: 40 }
       let callSites = []
@@ -536,6 +560,7 @@ export function apply(ctx, config) {
         symbols: [args.symbol],
         files,
         text: `${callerLines.length} call sites, ${transitive.length} transitive, ${calleeLines.length} callees`.slice(0, 500),
+        note: c2gNote(info),
       })
       const { evaluation } = loadTask(stateRoot, task)
       const summary = summarize(evaluation)

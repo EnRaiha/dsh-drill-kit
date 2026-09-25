@@ -189,3 +189,29 @@ test('a cached discovery entry without a snapshot is never served', () => {
   const after = JSON.parse(readFileSync(join(drillCache, 'c2g-discovery.json'), 'utf8'))
   assert.deepEqual(Object.keys(after.entries), [], 'the stale entry is gone from the map')
 })
+
+test('a cache-schema bump is visible on the next call, not after the TTL', () => {
+  const c2gDir = join(root, 'c2g-schema', 'proj')
+  const drillCache = join(root, 'drill-cache-schema')
+  mkdirSync(c2gDir, { recursive: true })
+  const db = join(c2gDir, 'cache.sqlite3')
+  execFileSync('sqlite3', [db], { input: `
+    CREATE TABLE meta (singleton INTEGER PRIMARY KEY, application_identity TEXT NOT NULL, canonical_root BLOB NOT NULL, project_key BLOB NOT NULL);
+    CREATE TABLE graph_snapshots (snapshot_id INTEGER PRIMARY KEY, resolver_tier TEXT NOT NULL, created_at_ns INTEGER NOT NULL);
+    CREATE TABLE active_snapshots (resolver_tier TEXT NOT NULL, completeness INTEGER NOT NULL, snapshot_id INTEGER NOT NULL, PRIMARY KEY (resolver_tier, completeness));
+    INSERT INTO meta VALUES (1, 'code2graph-cache', '${root}/repo-schema', x'00');
+    INSERT INTO graph_snapshots VALUES (1, 'scope', 0);
+    INSERT INTO active_snapshots VALUES ('scope', 1, 1);
+    PRAGMA user_version = 3;
+  ` })
+  const options = { cacheDir: drillCache, ttlMs: DEFAULT_TTL_MS }
+  assert.equal(discoverDb(`${root}/repo-schema`, join(root, 'c2g-schema'), 'sqlite3', options).schemaVersion, 3)
+
+  // Upstream bumps the cache schema while our entry is still fresh.
+  execFileSync('sqlite3', [db], { input: 'PRAGMA user_version = 4;' })
+  const after = discoverDb(`${root}/repo-schema`, join(root, 'c2g-schema'), 'sqlite3', options)
+  assert.equal(after.cached, true, 'still served from the discovery cache')
+  assert.equal(after.schemaVersion, 4, 'but the version is re-read, so the drift shows up immediately')
+  const persisted = JSON.parse(readFileSync(join(drillCache, 'c2g-discovery.json'), 'utf8'))
+  assert.equal(persisted.entries[`${root}/repo-schema`].schemaVersion, 4, 'and the refreshed version is persisted')
+})
