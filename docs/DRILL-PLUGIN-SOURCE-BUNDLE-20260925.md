@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.3**, source revision `90312d25e71c` on branch `master`, tree clean (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.3**, source revision `90312d25e71c` on branch `master`, tree DIRTY (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -11,7 +11,7 @@
 | `.github/workflows/publish.yml` | 37 | 1270 | `8392c0bbbcb091b4` | — |
 | `.gitignore` | 4 | 28 | `1adbb37be33001da` | — |
 | `LICENSE` | 22 | 1064 | `2f841f07845b05a9` | — |
-| `README.md` | 348 | 33175 | `ae530be4d64a81f3` | — |
+| `README.md` | 356 | 33629 | `f3e36d5f6d0176cc` | — |
 | `cordis.patch.yml` | 9 | 300 | `7b935022f8a8569a` | — |
 | `core/README.md` | 39 | 2842 | `63a0a42187d0161a` | — |
 | `core/c2g_tools.py` | 674 | 26464 | `bc13afe99510c89e` | — |
@@ -59,7 +59,7 @@
 | `test/pr.test.js` | 97 | 5612 | `13c93f92f822c760` | 7 |
 | `test/search.test.js` | 135 | 6629 | `bf1a0d746a4b8c32` | 11 |
 
-**Totals:** 9766 lines across 50 files; 104 tests declared across 9 test files.
+**Totals:** 9774 lines across 50 files; 104 tests declared across 9 test files.
 
 ## The test run, recorded
 
@@ -158,7 +158,7 @@ SOFTWARE.
 
 ## `README.md`
 
-sha256 `ae530be4d64a81f331f21ea03c3bbb4750a234947ed97f3681c4417cb3d2bf2c` · 348 lines
+sha256 `f3e36d5f6d0176cc60aeef5732c3db459affded027d68a4b58864b5141cc6a63` · 356 lines
 
 ````markdown
 # The drill kit
@@ -195,6 +195,14 @@ curl -fsSL https://raw.githubusercontent.com/EnRaiha/dsh-drill-kit/master/instal
 It finds the DSH checkout itself (`dsh` on `PATH`, `$HOME/projects/deepseek-harness`, or a checkout beside this repo), falls back from the plugin manager to a link install when pnpm or the network is missing, backs up a profile's `package.json` as `.bak-drill` before editing it, keeps a copy of any skill or role file it would overwrite, refuses to replace a live frontend directory unless you pass `--force`, and never restarts anything. `--dry-run` prints every action without writing.
 
 Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, `--manager`, `--skills`, `--frontends`, `--verify`, `--uninstall`, `--force`, `--dry-run`.
+
+**Until the package is on npm, install it by path or by URL** — a bare `dsh plugin add dsh-drill` resolves against the registry and fails with a 404 while the name is unpublished:
+
+```sh
+dsh plugin --profile tkg-web add /path/to/dsh-drill-kit          # local checkout
+dsh plugin --profile tkg-web add github:EnRaiha/dsh-drill-kit    # or from this repo
+dsh plugin --profile tkg-web add github:EnRaiha/dsh-drill-kit#v0.8.3   # pinned to a release
+```
 
 Or by hand:
 

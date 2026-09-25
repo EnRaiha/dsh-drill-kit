@@ -33,6 +33,14 @@ It finds the DSH checkout itself (`dsh` on `PATH`, `$HOME/projects/deepseek-harn
 
 Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, `--manager`, `--skills`, `--frontends`, `--verify`, `--uninstall`, `--force`, `--dry-run`.
 
+**Until the package is on npm, install it by path or by URL** — a bare `dsh plugin add dsh-drill` resolves against the registry and fails with a 404 while the name is unpublished:
+
+```sh
+dsh plugin --profile tkg-web add /path/to/dsh-drill-kit          # local checkout
+dsh plugin --profile tkg-web add github:EnRaiha/dsh-drill-kit    # or from this repo
+dsh plugin --profile tkg-web add github:EnRaiha/dsh-drill-kit#v0.8.3   # pinned to a release
+```
+
 Or by hand:
 
 ```sh
