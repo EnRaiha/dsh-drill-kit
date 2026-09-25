@@ -173,7 +173,11 @@ The pipeline's first stage starts from "the stack trace, error logs, input paylo
 
 ## A miss is a note, not evidence
 
-A `locate`/`blast` search that finds nothing still appends a record — for the audit trail — but carries no `files`, `symbols` or `text`, so the gate it belongs to stays open. (v0.7.0 shipped the opposite: a negative text result closed the gate it was supposed to feed. Fixed in v0.7.1 with a regression test.)
+A lookup that finds nothing still appends a record — for the audit trail — but carries no `files`, `symbols` or `text`, so the gate it belongs to stays open.
+
+The rule reaches every tool that can write one of those kinds: `drill_locate`, `drill_blast`, and `drill_search` when it is asked to record (`kind: locate|blast|edge`). A zero-hit `drill_search` writes the search it ran and `… — the <gate> gate stays open`, never a `text` field that the gate would count.
+
+That last path is where the fix took three releases, and the sequence is worth keeping: **v0.7.0** shipped the bug (a negative result closed the gate it was supposed to feed), **v0.7.1** fixed `drill_locate`/`drill_blast` and added a regression test, and **v0.7.3** found that `drill_search` still wrote `text: "no hits for <pattern>"` on a zero-hit search — the same bug, on the one recording path the earlier fix had not touched. Its test is two-sided: a miss stays open **and** a hit closes the gate, so "never closes" cannot pass either.
 
 ## Ledger concurrency and torn writes
 
@@ -226,7 +230,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 87 tests
+npm test        # node --test test/*.test.js — 88 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts

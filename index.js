@@ -625,6 +625,11 @@ export function apply(ctx, config) {
       const files = [...new Set(found.hits.map(h => h.file))]
       const kind = args.kind ?? 'none'
       const stage = args.stage ?? (kind === 'locate' ? 'localize' : kind === 'blast' ? 'blast' : kind === 'edge' ? 'edge' : 'localize')
+      // The gate a record feeds is chosen by `kind`, not by the stage label the
+      // caller may override, so the miss note names the gate that actually
+      // stays open.
+      const gate = kind === 'locate' ? 'localize' : kind === 'blast' ? 'blast' : 'edge'
+      const missed = found.hits.length === 0
 
       let recorded = ''
       if (kind !== 'none') {
@@ -633,9 +638,13 @@ export function apply(ctx, config) {
           kind,
           stage,
           cmd: `${found.engine} ${args.fixed ? '-F ' : ''}${args.word ? '-w ' : ''}'${args.pattern}'${args.glob ? ` --glob '${args.glob}'` : ''} ${repo}`,
-          ...(files.length > 0 ? { files } : {}),
-          text: hits.slice(0, 8).join(' | ').slice(0, 500) || `no hits for ${args.pattern}`,
-          note: 'text-level search evidence',
+          // A search that found nothing is a note, not evidence (rule 8): with
+          // no `files` and no `text` the gate it was searching for cannot close
+          // on the strength of the miss itself.
+          ...(missed ? {} : { files, text: hits.slice(0, 8).join(' | ').slice(0, 500) }),
+          note: missed
+            ? `searched ${found.engine} (text-level), no hit for ${args.pattern} — the ${gate} gate stays open`
+            : 'text-level search evidence',
         })
         recorded = `${kind}@${stage}`
       }
@@ -649,7 +658,9 @@ export function apply(ctx, config) {
         files,
         truncated: found.truncated,
         recorded,
-        note: found.error ?? (found.hits.length === 0 ? 'no hits' : ''),
+        note: found.error ?? (missed
+          ? (kind === 'none' ? 'no hits' : `no hits — recorded as a note only, the ${gate} gate stays open`)
+          : ''),
         gates: summary.gates,
         next: summary.next,
       }

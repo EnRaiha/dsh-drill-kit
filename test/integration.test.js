@@ -523,3 +523,40 @@ test('a lookup that finds nothing does not close the gate it belongs to', { skip
   assert.match(blast.note, /blast gate stays open/)
   assert.equal(evaluate(ledger2).gates.find(g => g.id === 'blast').ok, false)
 })
+
+test('a text-search miss is a note, not evidence — even when it is recorded as locate/blast', { skip }, async () => {
+  const { mkdirSync } = await import('node:fs')
+  const { evaluate } = await import('../lib/gates.js')
+  const repo = join(workspace, 'search-miss-repo')
+  mkdirSync(repo, { recursive: true })
+  writeFileSync(join(repo, 'a.txt'), 'nothing interesting here\n')
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, searchEngine: 'rg' }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-search-miss', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'search-miss', repo, base: 'HEAD' })
+  const searched = await call('drill_search', { pattern: 'zzz_absent_zzz', fixed: true, kind: 'locate' })
+  assert.equal(searched.hits.length, 0)
+  assert.equal(searched.recorded, 'locate@localize', 'the attempt is still recorded, for the audit trail')
+
+  const ledger = readFileSync(join(repo, '.drill', 'search-miss', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const entry = ledger.filter(e => e.kind === 'locate').at(-1)
+  assert.ok(entry, 'the miss appears in the ledger')
+  assert.equal(entry.text, undefined, 'a text-search miss carries no evidence text')
+  assert.equal(entry.files, undefined, 'and names no files')
+  assert.match(entry.note, /localize gate stays open/)
+  assert.equal(evaluate(ledger).gates.find(g => g.id === 'localize').ok, false, 'a miss never closes the gate it was searching for')
+
+  // The other half of the rule: a search that *does* hit still closes it, so
+  // "never closes" cannot pass this test either.
+  writeFileSync(join(repo, 'b.txt'), 'the zzz_absent_zzz token lives here\n')
+  const second = await call('drill_search', { pattern: 'zzz_absent_zzz', fixed: true, kind: 'locate' })
+  assert.equal(second.hits.length, 1)
+  const ledger2 = readFileSync(join(repo, '.drill', 'search-miss', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const hit = ledger2.filter(e => e.kind === 'locate').at(-1)
+  assert.match(hit.text ?? '', /b\.txt/, 'a hit records its evidence text')
+  assert.deepEqual(hit.files, [join(repo, 'b.txt')])
+  assert.equal(evaluate(ledger2).gates.find(g => g.id === 'localize').ok, true, 'a hit closes the gate')
+})
