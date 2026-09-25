@@ -1,0 +1,18 @@
+name: c2g
+version: 1.0.0
+description: |
+  Straight code2graph access (dbless): symbols, def, callers, callees, impact,
+  diff-impact, usages, references, imports, module-deps, error (failure signal → symbols). One stdlib-only Python
+  core (~/scripts/c2g_tools.py) shared with the Kilo plugin
+  (~/.kilo/plugins/c2g). No NodeDB, no PG, no cortex — the direct path; the
+  same questions also answer through cortex_codegraph_* and knowledge-graph_*.
+provides_tools:
+  - c2g_status
+  - c2g_index
+  - c2g_symbols
+  - c2g_def
+  - c2g_error
+  - c2g_blast_radius
+  - c2g_diff_impact
+  - c2g_query
+  - c2g_raw

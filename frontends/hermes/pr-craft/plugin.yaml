@@ -1,0 +1,14 @@
+name: pr-craft
+version: 1.0.0
+description: |
+  PR & code-review craft — distilled checklist injection plus lint tools for PR
+  descriptions, review comments and diff size gates. One stdlib-only Python core
+  (~/scripts/pr_craft.py) shared with the Kilo plugin (~/.kilo/plugins/pr-craft).
+provides_tools:
+  - pr_checklist
+  - pr_lint_description
+  - pr_lint_comment
+  - pr_lint_diff
+  - pr_review_plan
+provides_hooks:
+  - pre_llm_call

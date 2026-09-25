@@ -1,3 +1,76 @@
+# The drill kit
+
+One repository for the whole drill: the DSH plugin that enforces it, the two shared Python cores it borrows, the Kilo/Hermes frontends for those cores, and every document the work produced.
+
+`dsh` = DeepSeek Harness. The **drill** is one bug fix run as a pipeline with gates — localize from the failure signal, map the blast radius, enumerate the edge cases, prove **red** (fails on base) then **green** (passes with the fix), pass hygiene, pass a fresh-context read-only **Review 2**, then produce the PR — with every claim backed by an artifact in a ledger. "Done" is not a sentence; it is a gate evaluation.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 103 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
+| `core/c2g_tools.py` | the c2g core (stdlib only): `frame`, `error` and the query tools — cache → merged store → binary |
+| `core/pr_craft.py` | the PR-craft core (stdlib only): `lint-desc`, `lint-comment`, `lint-diff`, `plan`, `checklist` |
+| `frontends/kilo/`, `frontends/hermes/` | thin frontends that expose the two cores as plugins in those runtimes |
+| `docs/` | the specification, the reviews, and a generated source bundle for reviewers |
+| `tools/build-source-bundle.mjs` | regenerates `docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md` from the git revision |
+
+## Install the plugin
+
+```sh
+# from a checkout
+node <dsh-checkout>/apps/cli/lib/bin.js plugin --profile <profile> add /path/to/dsh-drill-kit
+# or straight from the repo once it is public
+dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit
+```
+
+The plugin row is declared in `cordis.patch.yml` (`dsh.bundle.patch` in `package.json`), which is what both the DSH profile manager and the awesome-dsh-plugin catalog read. Restart the runtime after adding it: host-side plugin rows are composed at boot.
+
+## Run the tests
+
+```sh
+node --test test/*.test.js           # 103 tests, 0 failures
+node tools/build-source-bundle.mjs   # refresh docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md
+```
+
+`test/integration.test.js` loads the real `@deepseek-ai/dsh-tools` runtime, compiles every tool schema against the real DSL, and drives whole drills through the real `execute()` path. It needs the host packages reachable from this checkout; when they are not, it **skips itself** instead of failing — so a standalone consumer sees a smaller count, never a false red. To wire them up:
+
+```sh
+mkdir -p node_modules/@deepseek-ai
+for p in llm/llm subagent/subagent core/tools; do
+  ln -sfn "$DSH_CHECKOUT/packages/$p" "node_modules/@deepseek-ai/dsh-$(basename $p)"
+done
+ln -sfn "$DSH_CHECKOUT/vendor/schemastery" node_modules/@deepseek-ai/schemastery
+```
+
+## Docs
+
+`docs/README.md` indexes them. The short version: **`DRILL-BUG-AND-PLUGIN-FULL-DOC`** is the canonical specification (it folds in both reviews and the risk register), and **`DRILL-PLUGIN-SOURCE-BUNDLE`** is a generated snapshot — every tracked file plus per-file hashes and a recorded test run — so a reviewer can audit the plugin without repo access.
+
+## Credits and upstream
+
+The drill stands on other people's work, and the c2g layer is theirs:
+
+| Project | Who | What this kit uses |
+|---|---|---|
+| [NodeDB-Lab/code2graph](https://github.com/NodeDB-Lab/code2graph) | [farhan-syah](https://github.com/farhan-syah) (NodeDB founder), with CLI fixes by [EnRaiha](https://github.com/EnRaiha) | the `c2g` library + CLI, and the per-project SQLite cache whose tables `drill_locate` / `drill_blast` query. Deliberately storage-neutral — every consumer brings its own store. |
+| [NodeDB-Lab/nodedb](https://github.com/NodeDB-Lab/nodedb) | the NodeDB-Lab org | the repository the drill was built and exercised against; its shards are the merged store's `nd_*` repo keys |
+| [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) | the catalog maintainers | the plugin conventions this repo follows (`dsh.bundle.patch`, `dsh-` naming) and the catalog a plugin can be listed in |
+
+What is *this* repository's own work: the gate implementation and ledger (`index.js`, `lib/`), the drill skill and auditor role, the merged-store/embedding fallback in `lib/embed.js`, and the two Python cores' drill-facing tools (`c2g_error`, `c2g_frame`).
+
+## Status
+
+`dsh-drill` **v0.8.2** · 16 tools · 103 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
+
+## Licence
+
+MIT — see `LICENSE`.
+
+---
+
+The package documentation follows.
+
 # dsh-drill
 
 Evidence-gated bug-fix drill for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`).
