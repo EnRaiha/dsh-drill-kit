@@ -263,3 +263,22 @@ test('a test killed by a signal is still recordable as a red proof', async () =>
   assert.equal(normalized.exit, 139)
   assert.equal(evaluate(readLedger(paths)).gates.find(g => g.id === 'red').ok, true, 'a signal-killed run is a valid red proof')
 })
+
+test('red, green and hygiene read the latest run of their kind, not the best one', () => {
+  // A stale pass is not a proof: the gates describe the tree as it is now.
+  const base = (exit, ts) => ({ kind: 'test', stage: 'patch', arm: 'base', exit, sha256: 'sha256:aa', ts })
+  const fix = (exit, ts) => ({ kind: 'test', stage: 'patch', arm: 'fix', exit, sha256: 'sha256:bb', ts })
+  const hyg = (exit, ts) => ({ kind: 'hygiene', stage: 'patch', exit, sha256: 'sha256:cc', ts })
+  const ok = (entries, id) => evaluate(entries).gates.find(g => g.id === id).ok
+
+  assert.equal(ok([fix(0, '1'), fix(100, '2')], 'green'), false, 'a later failing fix run reopens green')
+  assert.equal(ok([fix(100, '1'), fix(0, '2')], 'green'), true, 'the newest passing fix run closes it')
+  assert.equal(ok([base(100, '1'), base(0, '2')], 'red'), false, 'a base run that passes reopens red')
+  assert.equal(ok([base(0, '1'), base(100, '2')], 'red'), true)
+  assert.equal(ok([hyg(0, '1'), hyg(1, '2')], 'hygiene'), false, 'a later dirty preflight reopens hygiene')
+  assert.equal(ok([hyg(1, '1'), hyg(0, '2')], 'hygiene'), true)
+
+  // The detail has to say which run it read, or the reader cannot tell why.
+  const stale = evaluate([fix(0, '1'), fix(100, '2')]).gates.find(g => g.id === 'green')
+  assert.match(stale.detail, /latest fix run exited 100/)
+})

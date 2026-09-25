@@ -8,7 +8,7 @@ One repository for the whole drill: the DSH plugin that enforces it, the two sha
 
 | Path | What |
 |---|---|
-| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 106 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
+| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 107 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
 | `core/c2g_tools.py` | the c2g core (stdlib only): `frame`, `error` and the query tools — cache → merged store → binary |
 | `core/pr_craft.py` | the PR-craft core (stdlib only): `lint-desc`, `lint-comment`, `lint-diff`, `plan`, `checklist` |
 | `frontends/kilo/`, `frontends/hermes/` | thin frontends that expose the two cores as plugins in those runtimes |
@@ -39,7 +39,7 @@ Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, 
 dsh plugin --profile <profile> add dsh-drill              # from npm
 dsh plugin --profile <profile> add dsh-drill@0.8.4        # pinned
 dsh plugin --profile <profile> add /path/to/dsh-drill-kit # local checkout
-dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.5
+dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.6
 ```
 
 The plugin imports host modules that the DSH runtime provides (`@deepseek-ai/dsh-tools`, `dsh-llm`, `dsh-subagent`). All three are declared as **optional** peers: the host supplies them through the profile's own resolution, a missing host still fails loudly at import, and a fresh install stays quiet instead of printing `missing peer` for packages the user must not install. `@deepseek-ai/schemastery` is different — a runtime validator, not a host service — so it ships as a regular `dependencies` entry.
@@ -58,7 +58,7 @@ The plugin row is declared in `cordis.patch.yml` (`dsh.bundle.patch` in `package
 ## Run the tests
 
 ```sh
-node --test test/*.test.js           # 106 tests, 0 failures
+node --test test/*.test.js           # 107 tests, 0 failures
 node tools/build-source-bundle.mjs   # refresh docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md
 ```
 
@@ -90,7 +90,7 @@ What is *this* repository's own work: the gate implementation and ledger (`index
 
 ## Status
 
-`dsh-drill` **v0.8.5** · 16 tools · 106 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
+`dsh-drill` **v0.8.6** · 16 tools · 107 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
 
 ## Licence
 
@@ -115,9 +115,9 @@ Built for the NodeDB drill (`red → green → fmt/clippy → preflight → comm
 | 1 Localize | `localize` | one `locate` record naming file:line — from the failure signal (`drill_error` resolves each frame) or by symbol (`drill_locate`) |
 | 2 Blast radius | `blast` | one `blast` record with callers/callees/affected files (`drill_blast`), and/or the branch diff plus its dependents (`drill_diff`) |
 | 3 Edge cases | `edge` | one `edge` record stating the invariants that must fail — `drill_diff` proposes a checklist, you supply the invariants |
-| 4 Surgical patch | **`red`** | a `test` run with `arm=base` that **fails**, with a captured log |
-| | **`green`** | a `test` run with `arm=fix` that **passes**, with a captured log |
-| | **`hygiene`** | a `hygiene` run (fmt/clippy/preflight) with `exit 0` |
+| 4 Surgical patch | **`red`** | the latest `test` run with `arm=base` **fails**, with a captured log — a later base run that passes reopens it |
+| | **`green`** | the latest `test` run with `arm=fix` **passes**, with a captured log — a pass recorded before the last edit does not survive a later failing run |
+| | **`hygiene`** | the latest `hygiene` run (fmt/clippy/preflight) exited 0; a later dirty run reopens it |
 | 5 Review | **`review`** | a `review` record with `verdict=PASS`, `blockers=0`, **and the same commit as the green proof**; a later FAIL or a moved HEAD reopens the gate |
 | 6 PR | `pr` | a `pr` record pointing at the PR body file **rendered for the green proof's commit**; `drill_pr` records one only when the lint ran without blockers, and new commits reopen both `review` and `pr` |
 
@@ -334,7 +334,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 106 tests
+npm test        # node --test test/*.test.js — 107 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts

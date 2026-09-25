@@ -1,6 +1,6 @@
 {
   "name": "dsh-drill",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Evidence-gated bug-fix drill for DeepSeek Harness: failure signal to symbols, stage gates that a negative lookup cannot satisfy, plugin-run red/green proofs bound to a commit, c2g localization with a tgrep fallback, and a PR body rendered from the ledger.",
   "type": "module",
   "main": "./index.js",

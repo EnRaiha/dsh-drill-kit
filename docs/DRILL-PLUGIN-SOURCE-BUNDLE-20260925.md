@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.5**, source revision `167f14264f87` on branch `master`, tree clean (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.6**, source revision `167f14264f87` on branch `master`, tree DIRTY (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -11,12 +11,12 @@
 | `.github/workflows/publish.yml` | 37 | 1270 | `8392c0bbbcb091b4` | — |
 | `.gitignore` | 4 | 28 | `1adbb37be33001da` | — |
 | `LICENSE` | 22 | 1064 | `2f841f07845b05a9` | — |
-| `README.md` | 360 | 34795 | `1417a2846a8bc486` | — |
+| `README.md` | 360 | 34959 | `ee6fa625d6b123ee` | — |
 | `cordis.patch.yml` | 9 | 300 | `7b935022f8a8569a` | — |
 | `core/README.md` | 39 | 2842 | `63a0a42187d0161a` | — |
 | `core/c2g_tools.py` | 674 | 26464 | `bc13afe99510c89e` | — |
 | `core/pr_craft.py` | 488 | 26669 | `eb02e28af4b86fc5` | — |
-| `docs/README.md` | 28 | 2891 | `7b2a916aed0be638` | — |
+| `docs/README.md` | 28 | 2891 | `9c713389acdf676c` | — |
 | `frontends/README.md` | 46 | 2336 | `3c88c71470530bd6` | — |
 | `frontends/hermes/c2g/SKILL.md` | 89 | 5510 | `ea3640f117e6a831` | — |
 | `frontends/hermes/c2g/__init__.py` | 31 | 1592 | `4fe73484f698bcf9` | — |
@@ -37,7 +37,7 @@
 | `lib/cache.js` | 158 | 4455 | `20d40379c8ebd093` | — |
 | `lib/embed.js` | 291 | 12389 | `e668f9982e542349` | — |
 | `lib/errors.js` | 198 | 8128 | `93302e8fbf464dfb` | — |
-| `lib/gates.js` | 173 | 7395 | `dcc11c0d346e7ef5` | — |
+| `lib/gates.js` | 208 | 8816 | `8d2113047e9d8c9f` | — |
 | `lib/git.js` | 82 | 3037 | `726f3288b7d322b2` | — |
 | `lib/ledger.js` | 188 | 7827 | `a7844bfdd7350b77` | — |
 | `lib/pr.js` | 141 | 5828 | `6eb4c8b520ce3dfe` | — |
@@ -45,13 +45,13 @@
 | `lib/role.js` | 161 | 6175 | `a598d2bca4a2b564` | — |
 | `lib/runner.js` | 91 | 3367 | `c4c1b3d80baba0e8` | — |
 | `lib/search.js` | 303 | 12658 | `e973f0abbc09846d` | — |
-| `package.json` | 78 | 2084 | `fd83df126795e0fa` | — |
+| `package.json` | 78 | 2084 | `861f67153e3dfe7f` | — |
 | `roles/drill-auditor.md` | 55 | 3019 | `107e089732dc1579` | — |
 | `skills/drill/SKILL.md` | 68 | 5524 | `5b4c9a06a6dc254b` | — |
 | `tools/build-source-bundle.mjs` | 98 | 5401 | `7bc478d7e6669192` | — |
 | `test/c2g.test.js` | 162 | 9940 | `eda73b53ef16bf61` | 13 |
 | `test/cache.test.js` | 218 | 11674 | `4fbd474745ef55fe` | 9 |
-| `test/core.test.js` | 266 | 14119 | `d71387054522f89d` | 16 |
+| `test/core.test.js` | 285 | 15456 | `2bd59a493445c5c9` | 17 |
 | `test/embed.test.js` | 112 | 5884 | `f348358148cebd43` | 6 |
 | `test/errors.test.js` | 135 | 7536 | `96e8696dd4f94a23` | 10 |
 | `test/git-role.test.js` | 136 | 6242 | `36f78867e90a4799` | 9 |
@@ -59,19 +59,19 @@
 | `test/pr.test.js` | 97 | 5612 | `13c93f92f822c760` | 7 |
 | `test/search.test.js` | 135 | 6629 | `bf1a0d746a4b8c32` | 11 |
 
-**Totals:** 9874 lines across 50 files; 106 tests declared across 9 test files.
+**Totals:** 9928 lines across 50 files; 107 tests declared across 9 test files.
 
 ## The test run, recorded
 
 ```text
 $ node --test test/*.test.js
-# tests 106
-# pass 106
+# tests 107
+# pass 107
 # fail 0
 $ exit 0
 ```
 
-All 106 pass, 0 fail. The suite needs the host packages reachable from this checkout (`@deepseek-ai/dsh-tools`); when they are not, `integration.test.js` skips itself instead of failing, so a consumer running it standalone sees a smaller count rather than a false red.
+All 107 pass, 0 fail. The suite needs the host packages reachable from this checkout (`@deepseek-ai/dsh-tools`); when they are not, `integration.test.js` skips itself instead of failing, so a consumer running it standalone sees a smaller count rather than a false red.
 
 ---
 
@@ -158,7 +158,7 @@ SOFTWARE.
 
 ## `README.md`
 
-sha256 `1417a2846a8bc4869ad58cdbb637c99131fc8d0df3a4566dc2486579ceb72deb` · 360 lines
+sha256 `ee6fa625d6b123ee93c00d5bcdbc7af20af213006cd711f073a1f35e50a44758` · 360 lines
 
 ````markdown
 # The drill kit
@@ -171,7 +171,7 @@ One repository for the whole drill: the DSH plugin that enforces it, the two sha
 
 | Path | What |
 |---|---|
-| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 106 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
+| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 107 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
 | `core/c2g_tools.py` | the c2g core (stdlib only): `frame`, `error` and the query tools — cache → merged store → binary |
 | `core/pr_craft.py` | the PR-craft core (stdlib only): `lint-desc`, `lint-comment`, `lint-diff`, `plan`, `checklist` |
 | `frontends/kilo/`, `frontends/hermes/` | thin frontends that expose the two cores as plugins in those runtimes |
@@ -202,7 +202,7 @@ Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, 
 dsh plugin --profile <profile> add dsh-drill              # from npm
 dsh plugin --profile <profile> add dsh-drill@0.8.4        # pinned
 dsh plugin --profile <profile> add /path/to/dsh-drill-kit # local checkout
-dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.5
+dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.6
 ```
 
 The plugin imports host modules that the DSH runtime provides (`@deepseek-ai/dsh-tools`, `dsh-llm`, `dsh-subagent`). All three are declared as **optional** peers: the host supplies them through the profile's own resolution, a missing host still fails loudly at import, and a fresh install stays quiet instead of printing `missing peer` for packages the user must not install. `@deepseek-ai/schemastery` is different — a runtime validator, not a host service — so it ships as a regular `dependencies` entry.
@@ -221,7 +221,7 @@ The plugin row is declared in `cordis.patch.yml` (`dsh.bundle.patch` in `package
 ## Run the tests
 
 ```sh
-node --test test/*.test.js           # 106 tests, 0 failures
+node --test test/*.test.js           # 107 tests, 0 failures
 node tools/build-source-bundle.mjs   # refresh docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md
 ```
 
@@ -253,7 +253,7 @@ What is *this* repository's own work: the gate implementation and ledger (`index
 
 ## Status
 
-`dsh-drill` **v0.8.5** · 16 tools · 106 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
+`dsh-drill` **v0.8.6** · 16 tools · 107 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
 
 ## Licence
 
@@ -278,9 +278,9 @@ Built for the NodeDB drill (`red → green → fmt/clippy → preflight → comm
 | 1 Localize | `localize` | one `locate` record naming file:line — from the failure signal (`drill_error` resolves each frame) or by symbol (`drill_locate`) |
 | 2 Blast radius | `blast` | one `blast` record with callers/callees/affected files (`drill_blast`), and/or the branch diff plus its dependents (`drill_diff`) |
 | 3 Edge cases | `edge` | one `edge` record stating the invariants that must fail — `drill_diff` proposes a checklist, you supply the invariants |
-| 4 Surgical patch | **`red`** | a `test` run with `arm=base` that **fails**, with a captured log |
-| | **`green`** | a `test` run with `arm=fix` that **passes**, with a captured log |
-| | **`hygiene`** | a `hygiene` run (fmt/clippy/preflight) with `exit 0` |
+| 4 Surgical patch | **`red`** | the latest `test` run with `arm=base` **fails**, with a captured log — a later base run that passes reopens it |
+| | **`green`** | the latest `test` run with `arm=fix` **passes**, with a captured log — a pass recorded before the last edit does not survive a later failing run |
+| | **`hygiene`** | the latest `hygiene` run (fmt/clippy/preflight) exited 0; a later dirty run reopens it |
 | 5 Review | **`review`** | a `review` record with `verdict=PASS`, `blockers=0`, **and the same commit as the green proof**; a later FAIL or a moved HEAD reopens the gate |
 | 6 PR | `pr` | a `pr` record pointing at the PR body file **rendered for the green proof's commit**; `drill_pr` records one only when the lint ran without blockers, and new commits reopen both `review` and `pr` |
 
@@ -497,7 +497,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 106 tests
+npm test        # node --test test/*.test.js — 107 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts
@@ -1758,7 +1758,7 @@ if __name__ == "__main__":
 
 ## `docs/README.md`
 
-sha256 `7b2a916aed0be6387d4cb49daf3bb9b7270ca26085a19222cb2107301d952819` · 28 lines
+sha256 `9c713389acdf676c5a35dd0e00c8e2a7e27b1eb4bc3b587b29f088842ddeaa41` · 28 lines
 
 ````markdown
 # Docs
@@ -1767,7 +1767,7 @@ Everything the drill work produced, in reading order.
 
 | Document | What it is | Status |
 |---|---|---|
-| [`DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`](DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md) | **The canonical specification.** What the drill is, why it exists, the ledger data model, the three c2g resolution layers, the 16-tool reference implementation, the operating guide, both reviews (§7) and the risk register (§8), plus Appendices A–D. | current (v0.8.5, 106 tests) |
+| [`DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`](DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md) | **The canonical specification.** What the drill is, why it exists, the ledger data model, the three c2g resolution layers, the 16-tool reference implementation, the operating guide, both reviews (§7) and the risk register (§8), plus Appendices A–D. | current (v0.8.6, 107 tests) |
 | [`DRILL-PLUGIN-SOURCE-BUNDLE-20260925.md`](DRILL-PLUGIN-SOURCE-BUNDLE-20260925.md) | **Generated snapshot for reviewers.** All 29 tracked files inline, with per-file `sha256` + line counts, the declared test count per file, and the recorded `node --test` run. Regenerate with `node tools/build-source-bundle.mjs`. | generated at the commit in its header |
 | [`DRILL-E2E-REVIEW-20260925.md`](DRILL-E2E-REVIEW-20260925.md) | The first end-to-end review as a standalone record: method, the seven defects it found (gate binding, unbound `cwd`-style holes, rule-8 misses, mislabelled diffs), what was verified true, what stayed unverified. | historical — its content is §7 of the full doc |
 | [`DRILL-BUG-FULL-DOC-20260925.md`](DRILL-BUG-FULL-DOC-20260925.md) | The specification as it stood at **v0.8.0**, before the second review. | historical |
@@ -6403,7 +6403,7 @@ export function describeFrames(frames) {
 
 ## `lib/gates.js`
 
-sha256 `dcc11c0d346e7ef52483f8650e54ab03641360fc5c1f1b808a2d71d8e3227f31` · 173 lines
+sha256 `8d2113047e9d8c9f250a18907de1c5a5ebd19fd9021158ee108a22e330fb5165` · 208 lines
 
 ````javascript
 import { STAGES } from './ledger.js'
@@ -6452,8 +6452,20 @@ export const GATES = [
     requiredForDone: true,
     check: entries => {
       const hit = entries.filter(e => e.kind === 'test' && e.arm === 'base')
-      const red = hit.filter(e => Number.isInteger(e.exit) && e.exit !== 0 && e.sha256)
-      return { ok: red.length > 0, evidence: red.at(-1), detail: 'needs a `test` record with arm=base, non-zero exit and a hashed log; a test that passes on base is a guard, not a proof' }
+      // The gate reads the LATEST base run, not the best one. An earlier failure
+      // does not survive a later pass: if the tree now passes on base, the proof
+      // that this failure is real is gone, whatever the ledger recorded before.
+      const last = hit.at(-1)
+      const ok = last !== undefined && Number.isInteger(last.exit) && last.exit !== 0 && Boolean(last.sha256)
+      return {
+        ok,
+        evidence: last,
+        detail: last === undefined
+          ? 'needs a `test` record with arm=base, non-zero exit and a hashed log'
+          : ok
+            ? 'the latest base run failed with a hashed log'
+            : `the latest base run exited ${last.exit === 0 ? '0' : String(last.exit)} — a test that passes on base is a guard, not a proof; re-run the base arm against the failing case`,
+      }
     },
   },
   {
@@ -6463,8 +6475,20 @@ export const GATES = [
     requiredForDone: true,
     check: entries => {
       const hit = entries.filter(e => e.kind === 'test' && e.arm === 'fix')
-      const green = hit.filter(e => e.exit === 0 && e.sha256)
-      return { ok: green.length > 0, evidence: green.at(-1), detail: 'needs a `test` record with arm=fix, exit 0 and a hashed log' }
+      // Same rule as red, and for the same reason: the newest fix run describes
+      // the tree as it is now. A pass recorded before the last edit proves
+      // nothing about the code being pushed.
+      const last = hit.at(-1)
+      const ok = last !== undefined && last.exit === 0 && Boolean(last.sha256)
+      return {
+        ok,
+        evidence: last,
+        detail: last === undefined
+          ? 'needs a `test` record with arm=fix, exit 0 and a hashed log'
+          : ok
+            ? 'the latest fix run passed with a hashed log'
+            : `the latest fix run exited ${String(last.exit)} — a pass recorded before the last edit is stale; re-run the fix arm`,
+      }
     },
   },
   {
@@ -6474,8 +6498,19 @@ export const GATES = [
     requiredForDone: true,
     check: entries => {
       const hit = entries.filter(e => e.kind === 'hygiene')
-      const clean = hit.filter(e => e.exit === 0 && e.sha256)
-      return { ok: clean.length > 0, evidence: clean.at(-1), detail: 'needs a `hygiene` record with exit 0 (fmt/clippy/preflight) and a hashed log' }
+      // A dirty run after a clean one reopens the gate: the latest run is the
+      // one that describes the tree.
+      const last = hit.at(-1)
+      const ok = last !== undefined && last.exit === 0 && Boolean(last.sha256)
+      return {
+        ok,
+        evidence: last,
+        detail: last === undefined
+          ? 'needs a `hygiene` record with exit 0 (fmt/clippy/preflight) and a hashed log'
+          : ok
+            ? 'the latest preflight run was clean'
+            : `the latest preflight run exited ${String(last.exit)} — fix what it reported and run it again`,
+      }
     },
   },
   {
@@ -7654,12 +7689,12 @@ export function definitionPattern(symbol, language = 'rust') {
 
 ## `package.json`
 
-sha256 `fd83df126795e0fac99d15093d90270a1f224ba13c6831bf6b461750e9322f98` · 78 lines
+sha256 `861f67153e3dfe7f519f2f7183b26dc15a6e138fb5d811457e0f5dacc33c3e50` · 78 lines
 
 ````json
 {
   "name": "dsh-drill",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Evidence-gated bug-fix drill for DeepSeek Harness: failure signal to symbols, stage gates that a negative lookup cannot satisfy, plugin-run red/green proofs bound to a commit, c2g localization with a tgrep fallback, and a PR body rendered from the ledger.",
   "type": "module",
   "main": "./index.js",
@@ -8369,7 +8404,7 @@ test('a cache-schema bump is visible on the next call, not after the TTL', () =>
 
 ## `test/core.test.js`
 
-sha256 `d71387054522f89d314abeff35fe5b14ff60f879b9cea733e1e1077d45e71b2a` · 266 lines
+sha256 `2bd59a493445c5c9672fa8c0a921e872aa203520d90dc4614bfdf72a19a656ed` · 285 lines
 
 ````javascript
 import assert from 'node:assert/strict'
@@ -8636,6 +8671,25 @@ test('a test killed by a signal is still recordable as a red proof', async () =>
   })
   assert.equal(normalized.exit, 139)
   assert.equal(evaluate(readLedger(paths)).gates.find(g => g.id === 'red').ok, true, 'a signal-killed run is a valid red proof')
+})
+
+test('red, green and hygiene read the latest run of their kind, not the best one', () => {
+  // A stale pass is not a proof: the gates describe the tree as it is now.
+  const base = (exit, ts) => ({ kind: 'test', stage: 'patch', arm: 'base', exit, sha256: 'sha256:aa', ts })
+  const fix = (exit, ts) => ({ kind: 'test', stage: 'patch', arm: 'fix', exit, sha256: 'sha256:bb', ts })
+  const hyg = (exit, ts) => ({ kind: 'hygiene', stage: 'patch', exit, sha256: 'sha256:cc', ts })
+  const ok = (entries, id) => evaluate(entries).gates.find(g => g.id === id).ok
+
+  assert.equal(ok([fix(0, '1'), fix(100, '2')], 'green'), false, 'a later failing fix run reopens green')
+  assert.equal(ok([fix(100, '1'), fix(0, '2')], 'green'), true, 'the newest passing fix run closes it')
+  assert.equal(ok([base(100, '1'), base(0, '2')], 'red'), false, 'a base run that passes reopens red')
+  assert.equal(ok([base(0, '1'), base(100, '2')], 'red'), true)
+  assert.equal(ok([hyg(0, '1'), hyg(1, '2')], 'hygiene'), false, 'a later dirty preflight reopens hygiene')
+  assert.equal(ok([hyg(1, '1'), hyg(0, '2')], 'hygiene'), true)
+
+  // The detail has to say which run it read, or the reader cannot tell why.
+  const stale = evaluate([fix(0, '1'), fix(100, '2')]).gates.find(g => g.id === 'green')
+  assert.match(stale.detail, /latest fix run exited 100/)
 })
 ````
 
