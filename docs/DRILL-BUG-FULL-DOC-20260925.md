@@ -1,6 +1,6 @@
 # The Drill — full document
 
-*2026-09-25 · maya · one issue → one branch → one evidence chain → one reviewed PR · the DSH plugin and its full specification*
+*2026-09-25 · EnRaiha · one issue → one branch → one evidence chain → one reviewed PR · the DSH plugin and its full specification*
 
 ---
 

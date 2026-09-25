@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.2**, source revision `d7936bf83f81` on branch `master`, tree clean (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.2**, source revision `d7936bf83f81` on branch `master`, tree DIRTY (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -43,7 +43,7 @@
 | `lib/role.js` | 161 | 6175 | `a598d2bca4a2b564` | — |
 | `lib/runner.js` | 91 | 3367 | `c4c1b3d80baba0e8` | — |
 | `lib/search.js` | 303 | 12658 | `e973f0abbc09846d` | — |
-| `package.json` | 55 | 1556 | `e483aa6b560b4599` | — |
+| `package.json` | 65 | 1839 | `dd360fec853755e5` | — |
 | `roles/drill-auditor.md` | 55 | 3019 | `107e089732dc1579` | — |
 | `skills/drill/SKILL.md` | 68 | 5524 | `5b4c9a06a6dc254b` | — |
 | `tools/build-source-bundle.mjs` | 98 | 5401 | `7bc478d7e6669192` | — |
@@ -57,7 +57,7 @@
 | `test/pr.test.js` | 86 | 4971 | `c0155d628f1b8e4d` | 6 |
 | `test/search.test.js` | 135 | 6629 | `bf1a0d746a4b8c32` | 11 |
 
-**Totals:** 9410 lines across 48 files; 103 tests declared across 9 test files.
+**Totals:** 9420 lines across 48 files; 103 tests declared across 9 test files.
 
 ## The test run, recorded
 
@@ -7287,7 +7287,7 @@ export function definitionPattern(symbol, language = 'rust') {
 
 ## `package.json`
 
-sha256 `e483aa6b560b459955160e136dfadc289dc233cb87c9c75aa5aefb238dd1e942` · 55 lines
+sha256 `dd360fec853755e5afe884b0276b73fd4aaca33a626f80a8e8c794ca2f54b328` · 65 lines
 
 ````json
 {
@@ -7335,14 +7335,24 @@ sha256 `e483aa6b560b459955160e136dfadc289dc233cb87c9c75aa5aefb238dd1e942` · 55 
   },
   "keywords": [
     "dsh",
-    "dsh-plugin",
     "deepseek-harness",
-    "drill",
-    "red-green",
+    "plugin",
+    "code-review",
+    "bug-fix",
+    "code2graph",
     "evidence",
-    "code2graph"
+    "drill"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "EnRaiha",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EnRaiha/dsh-drill-kit.git"
+  },
+  "homepage": "https://github.com/EnRaiha/dsh-drill-kit#readme",
+  "bugs": {
+    "url": "https://github.com/EnRaiha/dsh-drill-kit/issues"
+  }
 }
 ````
 

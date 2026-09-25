@@ -43,12 +43,22 @@
   },
   "keywords": [
     "dsh",
-    "dsh-plugin",
     "deepseek-harness",
-    "drill",
-    "red-green",
+    "plugin",
+    "code-review",
+    "bug-fix",
+    "code2graph",
     "evidence",
-    "code2graph"
+    "drill"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "EnRaiha",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EnRaiha/dsh-drill-kit.git"
+  },
+  "homepage": "https://github.com/EnRaiha/dsh-drill-kit#readme",
+  "bugs": {
+    "url": "https://github.com/EnRaiha/dsh-drill-kit/issues"
+  }
 }

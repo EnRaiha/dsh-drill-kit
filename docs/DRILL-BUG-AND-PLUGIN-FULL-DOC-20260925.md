@@ -1,6 +1,6 @@
 # The Drill — full document: the bug-fixing pipeline and the plugin
 
-*2026-09-25 · maya · one issue → one branch → one evidence chain → one reviewed PR · the `dsh-drill` DSH plugin (v0.8.2) and its full specification, including the defects the two reviews found and fixed*
+*2026-09-25 · EnRaiha · one issue → one branch → one evidence chain → one reviewed PR · the `dsh-drill` DSH plugin (v0.8.2) and its full specification, including the defects the two reviews found and fixed*
 
 ---
 
