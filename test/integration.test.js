@@ -704,3 +704,115 @@ test('drill_diff says so when the base ref could not be compared', { skip }, asy
   assert.equal(blast.cmd, 'git diff --name-only --diff-filter=ACMR HEAD')
   assert.match(blast.note, /working-tree diff against HEAD/)
 })
+
+test('drill_pr falls back to the session cwd when no task metadata names a repo', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync, rmSync } = await import('node:fs')
+  const repo = join(workspace, 'pr-no-active-repo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, searchEngine: 'rg', prLint: false }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-pr-cwd', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'pr-cwd', repo, base: 'HEAD' })
+  // The bug only fires on the fallback: `active.repo` undefined, so the tool
+  // reaches for the session cwd — which the tool never destructured.
+  rmSync(join(repo, '.drill', 'active.json'), { force: true })
+
+  const pr = await call('drill_pr', { task: 'pr-cwd', title: 'fix(seq): keep the batch ordered' })
+  assert.equal(pr.recorded, true, 'the body is rendered and recorded')
+  assert.ok(existsSync(pr.bodyPath), 'the body file exists')
+  assert.match(readFileSync(pr.bodyPath, 'utf8'), /keep the batch ordered/)
+})
+
+test('drill_review removes its session listener on every exit path', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'review-listener-repo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+
+  let listeningDuringRun = null
+  const subagents = {
+    async start() {
+      listeningDuringRun = ctx.listeners.has('session/event')
+      return {
+        id: 'child-listener',
+        result: Promise.resolve({ stopReason: 'completed', structured: { verdict: 'PASS', blockers: [], unverified: [], summary: 'clean' } }),
+        async dispose() {},
+      }
+    },
+  }
+  const mod = await import('../index.js')
+  const ctx = fakeContext({ subagents })
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-listener', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'listener-drill', repo, base: 'HEAD' })
+  await call('drill_review', { task: 'listener-drill' })
+  assert.equal(listeningDuringRun, true, 'the budget listener is registered while the reviewer runs')
+  assert.equal(ctx.listeners.has('session/event'), false, 'and disposed when the review returns')
+
+  await call('drill_review', { task: 'listener-drill' })
+  assert.equal(ctx.listeners.has('session/event'), false, 'a second review does not accumulate listeners')
+})
+
+test('a role that says maxToolCalls: 0 means no cap, not the row default', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'review-budget-repo')
+  mkdirSync(join(repo, '.dsh', 'roles'), { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+  writeFileSync(join(repo, '.dsh', 'roles', 'uncapped-auditor.md'), '---\nname: uncapped-auditor\ntools: [read]\nmaxToolCalls: 0\n---\n\nRead-only, no tool cap.\n')
+  writeFileSync(join(repo, '.dsh', 'roles', 'rolesselected-auditor.md'), '---\nname: rollesselected-auditor\ntools: [read]\n---\n\nRead-only, no budget key at all.\n')
+
+  const subagents = {
+    async start() {
+      return {
+        id: 'child-budget',
+        result: Promise.resolve({ stopReason: 'completed', structured: { verdict: 'PASS', blockers: [], unverified: [], summary: 'clean' } }),
+        async dispose() {},
+      }
+    },
+  }
+  const mod = await import('../index.js')
+  const ctx = fakeContext({ subagents })
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, maxReviewToolCalls: 7 }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-budget', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'budget-drill', repo, base: 'HEAD' })
+  await call('drill_review', { task: 'budget-drill', role: 'uncapped-auditor' })
+  const ledger = readFileSync(join(repo, '.drill', 'budget-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const uncapped = readFileSync(ledger.filter(e => e.kind === 'review').at(-1).log, 'utf8')
+  assert.match(uncapped, /role: uncapped-auditor \(project\)/)
+  assert.match(uncapped, /toolCalls: 0\/unlimited/, '0 is "no cap", not "fall back to 7"')
+
+  await call('drill_review', { task: 'budget-drill', role: 'rolesselected-auditor' })
+  const ledger2 = readFileSync(join(repo, '.drill', 'budget-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const fallback = readFileSync(ledger2.filter(e => e.kind === 'review').at(-1).log, 'utf8')
+  assert.match(fallback, /toolCalls: 0\/7/, 'a role with no budget key falls back to the row default')
+})

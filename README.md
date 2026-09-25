@@ -78,7 +78,7 @@ Every key has a schema default; override by re-stating the row's whole config in
 | `provider` | `spawn` | Subagent provider used by `drill_review` (`spawn` = fresh context; `fork` inherits the parent prefix). A role file's `provider`/`model` win when both are present. |
 | `model` | `''` | Optional reviewer model override. |
 | `defaultRole` | `drill-auditor` | Role id `drill_review` audits with. |
-| `maxReviewToolCalls` | `40` | Fallback budget when the role sets none; `0` disables the cap. Exceeding it aborts the child and records FAIL. |
+| `maxReviewToolCalls` | `40` | Fallback budget when the role sets none; `0` disables the cap. A role's own `maxToolCalls` always wins, including `0` — v0.8.1 fixed a case where a role saying `0` was silently overridden by this fallback. Exceeding the budget aborts the child and records FAIL. |
 | `runTimeoutMs` | `900000` | Default timeout for `drill_run`. |
 | `errorMaxResolve` | `12` | Cap on frames `drill_error` resolves against the graph. |
 | `prLint` | `true` | Score the rendered PR body with the PR-craft core before recording it. |
@@ -230,7 +230,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 97 tests
+npm test        # node --test test/*.test.js — 100 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts

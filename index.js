@@ -1021,7 +1021,7 @@ export function apply(ctx, config) {
       }],
     },
     async execute(args, exec) {
-      const { stateRoot } = roots(exec, config)
+      const { cwd, stateRoot } = roots(exec, config)
       const task = resolveTask(args, stateRoot)
       const paths = taskPaths(stateRoot, task)
       const active = readActive(stateRoot) ?? {}
@@ -1433,7 +1433,11 @@ export function apply(ctx, config) {
       const roleProvider = typeof role?.data.provider === 'string' && role.data.provider.length > 0 ? role.data.provider : null
       const provider = roleProvider ?? config.provider
       const roleMax = role ? roleBudget(role) : null
-      const budget = roleMax !== null && roleMax > 0 ? roleMax : config.maxReviewToolCalls
+      // `roleBudget` returns 0 for a role that says `maxToolCalls: 0`, and 0 is
+      // the documented "no cap" (the counter below only aborts when budget > 0,
+      // and the artifact renders 0 as "unlimited"). Only a role with *no*
+      // budget falls back to the row default.
+      const budget = roleMax !== null ? roleMax : config.maxReviewToolCalls
 
       const controller = new AbortController()
       const onAbort = () => controller.abort(exec.signal.reason)
@@ -1453,7 +1457,11 @@ export function apply(ctx, config) {
         used += 1
         if (budget > 0 && used > budget) controller.abort('review-tool-budget')
       }
-      ctx.on('session/event', onEvent, { global: true })
+      // `ctx.on` returns a disposer; without keeping it, the listener outlives
+      // the review and keeps holding `run`, `controller` and `budget`. Hosts
+      // that return nothing are tolerated: `?.()` is a no-op, not a throw in
+      // `finally` that would mask the real verdict.
+      const disposeSessionListener = ctx.on('session/event', onEvent, { global: true })
 
       try {
         try {
@@ -1510,6 +1518,7 @@ export function apply(ctx, config) {
           next: gateSummary.next,
         }
       } finally {
+        disposeSessionListener?.()
         exec.signal.removeEventListener('abort', onAbort)
         if (run !== undefined) {
           try {
