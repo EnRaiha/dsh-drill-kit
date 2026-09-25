@@ -17,6 +17,24 @@ One repository for the whole drill: the DSH plugin that enforces it, the two sha
 
 ## Install the plugin
 
+**The script does it**, from a checkout or piped straight from GitHub — no npm registry, no API token:
+
+```sh
+./install.sh --profile web                 # official `dsh plugin add` (needs pnpm on PATH)
+./install.sh --profile web --link          # symlink install: no pnpm, no network
+./install.sh --profile web --skills --frontends --verify
+./install.sh --profile web --uninstall
+
+curl -fsSL https://raw.githubusercontent.com/EnRaiha/dsh-drill-kit/master/install.sh \
+  | bash -s -- --profile web --link
+```
+
+It finds the DSH checkout itself (`dsh` on `PATH`, `$HOME/projects/deepseek-harness`, or a checkout beside this repo), falls back from the plugin manager to a link install when pnpm or the network is missing, backs up a profile's `package.json` as `.bak-drill` before editing it, keeps a copy of any skill or role file it would overwrite, refuses to replace a live frontend directory unless you pass `--force`, and never restarts anything. `--dry-run` prints every action without writing.
+
+Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, `--manager`, `--skills`, `--frontends`, `--verify`, `--uninstall`, `--force`, `--dry-run`.
+
+Or by hand:
+
 ```sh
 # from a checkout
 node <dsh-checkout>/apps/cli/lib/bin.js plugin --profile <profile> add /path/to/dsh-drill-kit
