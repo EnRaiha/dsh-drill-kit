@@ -1,0 +1,36 @@
+name: publish
+
+# Trusted publishing (OIDC): npm exchanges this workflow's identity for a
+# short-lived publish credential, so no token has to be stored. An NPM_TOKEN
+# secret is still honoured if present, which is what the very first publish
+# needs — npm configures a trusted publisher for a package that already exists
+# (npm/cli#8544 tracks allowing the initial version over OIDC).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # No install step on purpose: the suite has no dependencies of its own, and
+      # the integration test skips itself when the host packages are absent
+      # instead of failing. Installing would try to resolve the @deepseek-ai
+      # peers, which are provided by the host, not by this package.
+      - run: node --test test/*.test.js
+      - run: pnpm publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

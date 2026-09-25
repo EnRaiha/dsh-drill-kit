@@ -83,3 +83,14 @@ test('the real pr-craft core scores a rendered body', { skip: !existsSync(DEFAUL
   assert.equal(typeof result.verdict, 'string')
   assert.ok(Array.isArray(result.blockers))
 })
+
+test('the PR-craft core resolves inside the package before falling back to $HOME', () => {
+  // A published install has no ~/scripts/pr_craft.py, so the core has to come
+  // from the package itself — otherwise drill_pr writes a body nobody scored.
+  assert.match(DEFAULT_PR_CORE, /core[/\\]pr_craft\.py$/, 'the bundled core wins when it exists')
+  assert.ok(existsSync(DEFAULT_PR_CORE), 'and it exists in this checkout')
+
+  const lint = lintPrBody('fix(seq): keep the batch ordered\n\n## What changed\n\n- a\n', { core: DEFAULT_PR_CORE })
+  assert.equal(lint.available, true, 'the bundled core runs')
+  assert.equal(lint.error, null)
+})

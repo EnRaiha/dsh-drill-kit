@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.2**, source revision `d6eccc5c0e94` on branch `master`, tree clean (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.3**, source revision `d6eccc5c0e94` on branch `master`, tree DIRTY (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -8,14 +8,15 @@
 
 | File | Lines | Bytes | sha256 (first 16) | Tests declared |
 |---|---|---|---|---|
+| `.github/workflows/publish.yml` | 37 | 1270 | `8392c0bbbcb091b4` | — |
 | `.gitignore` | 4 | 28 | `1adbb37be33001da` | — |
 | `LICENSE` | 22 | 1064 | `2f841f07845b05a9` | — |
-| `README.md` | 330 | 31989 | `d67760407102f2d3` | — |
+| `README.md` | 330 | 31989 | `cd5e594d63a5ebcb` | — |
 | `cordis.patch.yml` | 9 | 300 | `7b935022f8a8569a` | — |
 | `core/README.md` | 39 | 2842 | `63a0a42187d0161a` | — |
 | `core/c2g_tools.py` | 674 | 26464 | `bc13afe99510c89e` | — |
 | `core/pr_craft.py` | 488 | 26669 | `eb02e28af4b86fc5` | — |
-| `docs/README.md` | 28 | 2891 | `3c914239cc11ebe6` | — |
+| `docs/README.md` | 28 | 2891 | `d617a76955e43ba7` | — |
 | `frontends/README.md` | 46 | 2336 | `3c88c71470530bd6` | — |
 | `frontends/hermes/c2g/SKILL.md` | 89 | 5510 | `ea3640f117e6a831` | — |
 | `frontends/hermes/c2g/__init__.py` | 31 | 1592 | `4fe73484f698bcf9` | — |
@@ -38,12 +39,12 @@
 | `lib/gates.js` | 173 | 7395 | `dcc11c0d346e7ef5` | — |
 | `lib/git.js` | 82 | 3037 | `726f3288b7d322b2` | — |
 | `lib/ledger.js` | 188 | 7827 | `a7844bfdd7350b77` | — |
-| `lib/pr.js` | 130 | 5266 | `849a8a758cc6eabf` | — |
+| `lib/pr.js` | 141 | 5828 | `6eb4c8b520ce3dfe` | — |
 | `lib/report.js` | 64 | 2584 | `67dea8b82fbfc52c` | — |
 | `lib/role.js` | 161 | 6175 | `a598d2bca4a2b564` | — |
 | `lib/runner.js` | 91 | 3367 | `c4c1b3d80baba0e8` | — |
 | `lib/search.js` | 303 | 12658 | `e973f0abbc09846d` | — |
-| `package.json` | 65 | 1839 | `dd360fec853755e5` | — |
+| `package.json` | 70 | 1946 | `4a51ec81014972df` | — |
 | `roles/drill-auditor.md` | 55 | 3019 | `107e089732dc1579` | — |
 | `skills/drill/SKILL.md` | 68 | 5524 | `5b4c9a06a6dc254b` | — |
 | `tools/build-source-bundle.mjs` | 98 | 5401 | `7bc478d7e6669192` | — |
@@ -54,24 +55,67 @@
 | `test/errors.test.js` | 135 | 7536 | `96e8696dd4f94a23` | 10 |
 | `test/git-role.test.js` | 136 | 6242 | `36f78867e90a4799` | 9 |
 | `test/integration.test.js` | 882 | 49642 | `be244980d46c33a2` | 23 |
-| `test/pr.test.js` | 86 | 4971 | `c0155d628f1b8e4d` | 6 |
+| `test/pr.test.js` | 97 | 5612 | `13c93f92f822c760` | 7 |
 | `test/search.test.js` | 135 | 6629 | `bf1a0d746a4b8c32` | 11 |
 
-**Totals:** 9420 lines across 48 files; 103 tests declared across 9 test files.
+**Totals:** 9484 lines across 49 files; 104 tests declared across 9 test files.
 
 ## The test run, recorded
 
 ```text
 $ node --test test/*.test.js
-# tests 103
-# pass 103
+# tests 104
+# pass 104
 # fail 0
 $ exit 0
 ```
 
-All 103 pass, 0 fail. The suite needs the host packages reachable from this checkout (`@deepseek-ai/dsh-tools`); when they are not, `integration.test.js` skips itself instead of failing, so a consumer running it standalone sees a smaller count rather than a false red.
+All 104 pass, 0 fail. The suite needs the host packages reachable from this checkout (`@deepseek-ai/dsh-tools`); when they are not, `integration.test.js` skips itself instead of failing, so a consumer running it standalone sees a smaller count rather than a false red.
 
 ---
+
+## `.github/workflows/publish.yml`
+
+sha256 `8392c0bbbcb091b4004745f7501c6701ff3306204860b0097453a8360128432d` · 37 lines
+
+````yaml
+name: publish
+
+# Trusted publishing (OIDC): npm exchanges this workflow's identity for a
+# short-lived publish credential, so no token has to be stored. An NPM_TOKEN
+# secret is still honoured if present, which is what the very first publish
+# needs — npm configures a trusted publisher for a package that already exists
+# (npm/cli#8544 tracks allowing the initial version over OIDC).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # No install step on purpose: the suite has no dependencies of its own, and
+      # the integration test skips itself when the host packages are absent
+      # instead of failing. Installing would try to resolve the @deepseek-ai
+      # peers, which are provided by the host, not by this package.
+      - run: node --test test/*.test.js
+      - run: pnpm publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+````
 
 ## `.gitignore`
 
@@ -113,7 +157,7 @@ SOFTWARE.
 
 ## `README.md`
 
-sha256 `d67760407102f2d306c0c9dc57bf94d7e3c606fae8241a98ff6aedba03652908` · 330 lines
+sha256 `cd5e594d63a5ebcb50bbdb3470d1c2415999dd70aba784134a99c7dac6e009fa` · 330 lines
 
 ````markdown
 # The drill kit
@@ -126,7 +170,7 @@ One repository for the whole drill: the DSH plugin that enforces it, the two sha
 
 | Path | What |
 |---|---|
-| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 103 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
+| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 104 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
 | `core/c2g_tools.py` | the c2g core (stdlib only): `frame`, `error` and the query tools — cache → merged store → binary |
 | `core/pr_craft.py` | the PR-craft core (stdlib only): `lint-desc`, `lint-comment`, `lint-diff`, `plan`, `checklist` |
 | `frontends/kilo/`, `frontends/hermes/` | thin frontends that expose the two cores as plugins in those runtimes |
@@ -147,7 +191,7 @@ The plugin row is declared in `cordis.patch.yml` (`dsh.bundle.patch` in `package
 ## Run the tests
 
 ```sh
-node --test test/*.test.js           # 103 tests, 0 failures
+node --test test/*.test.js           # 104 tests, 0 failures
 node tools/build-source-bundle.mjs   # refresh docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md
 ```
 
@@ -179,7 +223,7 @@ What is *this* repository's own work: the gate implementation and ledger (`index
 
 ## Status
 
-`dsh-drill` **v0.8.2** · 16 tools · 103 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
+`dsh-drill` **v0.8.3** · 16 tools · 104 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
 
 ## Licence
 
@@ -422,7 +466,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 103 tests
+npm test        # node --test test/*.test.js — 104 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts
@@ -1683,7 +1727,7 @@ if __name__ == "__main__":
 
 ## `docs/README.md`
 
-sha256 `3c914239cc11ebe6af4c4bb12de227ccb5a6b56c8a588251db0d70d205e099a9` · 28 lines
+sha256 `d617a76955e43ba7bc8d7f6c9a8493a079e09c753b8733f2069197686816639c` · 28 lines
 
 ````markdown
 # Docs
@@ -1692,7 +1736,7 @@ Everything the drill work produced, in reading order.
 
 | Document | What it is | Status |
 |---|---|---|
-| [`DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`](DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md) | **The canonical specification.** What the drill is, why it exists, the ledger data model, the three c2g resolution layers, the 16-tool reference implementation, the operating guide, both reviews (§7) and the risk register (§8), plus Appendices A–D. | current (v0.8.2, 103 tests) |
+| [`DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`](DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md) | **The canonical specification.** What the drill is, why it exists, the ledger data model, the three c2g resolution layers, the 16-tool reference implementation, the operating guide, both reviews (§7) and the risk register (§8), plus Appendices A–D. | current (v0.8.3, 104 tests) |
 | [`DRILL-PLUGIN-SOURCE-BUNDLE-20260925.md`](DRILL-PLUGIN-SOURCE-BUNDLE-20260925.md) | **Generated snapshot for reviewers.** All 29 tracked files inline, with per-file `sha256` + line counts, the declared test count per file, and the recorded `node --test` run. Regenerate with `node tools/build-source-bundle.mjs`. | generated at the commit in its header |
 | [`DRILL-E2E-REVIEW-20260925.md`](DRILL-E2E-REVIEW-20260925.md) | The first end-to-end review as a standalone record: method, the seven defects it found (gate binding, unbound `cwd`-style holes, rule-8 misses, mislabelled diffs), what was verified true, what stayed unverified. | historical — its content is §7 of the full doc |
 | [`DRILL-BUG-FULL-DOC-20260925.md`](DRILL-BUG-FULL-DOC-20260925.md) | The specification as it stood at **v0.8.0**, before the second review. | historical |
@@ -6508,11 +6552,12 @@ export function writeReport(paths, markdown) {
 
 ## `lib/pr.js`
 
-sha256 `849a8a758cc6eabff6b3f3af9061fda00243bc4a1019ed4595070c35030c4e28` · 130 lines
+sha256 `6eb4c8b520ce3dfe65dd19d5db12578d7abf6fe26ebf10120cf4f744c6ab8c9b` · 141 lines
 
 ````javascript
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 import { evaluate, gateTable } from './gates.js'
 
@@ -6526,8 +6571,18 @@ import { evaluate, gateTable } from './gates.js'
  * that never ran.
  */
 
-/** Where the PR-craft core lives; shared with the Kilo and Hermes frontends. */
-export const DEFAULT_PR_CORE = `${process.env.HOME ?? ''}/scripts/pr_craft.py`
+/**
+ * Where the PR-craft core lives.
+ *
+ * Resolution order: the `PR_CRAFT_CORE` override, then the copy shipped inside
+ * this package (`core/pr_craft.py`, which is what an npm install gets), then the
+ * home-directory install the Kilo and Hermes frontends use. Without the middle
+ * step a published package would silently lint nothing on a machine that never
+ * had the core, and `drill_pr` would record a body nobody scored.
+ */
+const BUNDLED_PR_CORE = fileURLToPath(new URL('../core/pr_craft.py', import.meta.url))
+export const DEFAULT_PR_CORE = process.env.PR_CRAFT_CORE
+  ?? (existsSync(BUNDLED_PR_CORE) ? BUNDLED_PR_CORE : `${process.env.HOME ?? ''}/scripts/pr_craft.py`)
 
 /**
  * Render the PR body.
@@ -7287,12 +7342,12 @@ export function definitionPattern(symbol, language = 'rust') {
 
 ## `package.json`
 
-sha256 `dd360fec853755e5afe884b0276b73fd4aaca33a626f80a8e8c794ca2f54b328` · 65 lines
+sha256 `4a51ec81014972df5c681034f7740e3a7f69e3cbd1d16b68adcb517d06dbe011` · 70 lines
 
 ````json
 {
   "name": "dsh-drill",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Evidence-gated bug-fix drill for DeepSeek Harness: failure signal to symbols, stage gates that a negative lookup cannot satisfy, plugin-run red/green proofs bound to a commit, c2g localization with a tgrep fallback, and a PR body rendered from the ledger.",
   "type": "module",
   "main": "./index.js",
@@ -7307,6 +7362,7 @@ sha256 `dd360fec853755e5afe884b0276b73fd4aaca33a626f80a8e8c794ca2f54b328` · 65 
     "skills",
     "roles",
     "cordis.patch.yml",
+    "core/pr_craft.py",
     "README.md"
   ],
   "dsh": {
@@ -7317,7 +7373,8 @@ sha256 `dd360fec853755e5afe884b0276b73fd4aaca33a626f80a8e8c794ca2f54b328` · 65 
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "bundle": "node tools/build-source-bundle.mjs"
+    "bundle": "node tools/build-source-bundle.mjs",
+    "prepublishOnly": "npm test"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
@@ -7352,6 +7409,9 @@ sha256 `dd360fec853755e5afe884b0276b73fd4aaca33a626f80a8e8c794ca2f54b328` · 65 
   "homepage": "https://github.com/EnRaiha/dsh-drill-kit#readme",
   "bugs": {
     "url": "https://github.com/EnRaiha/dsh-drill-kit/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
 ````
@@ -9550,7 +9610,7 @@ test('a cache with only a partial scope snapshot answers, and the record says so
 
 ## `test/pr.test.js`
 
-sha256 `c0155d628f1b8e4d2d95e312c5fecfe33f63e0be5c8722d7459ef3c7520b7878` · 86 lines
+sha256 `13c93f92f822c7608bc72af519dc1f8492cd26b31506635ef96eb139aab5a1e5` · 97 lines
 
 ````javascript
 import assert from 'node:assert/strict'
@@ -9637,6 +9697,17 @@ test('the real pr-craft core scores a rendered body', { skip: !existsSync(DEFAUL
   assert.equal(typeof result.score, 'number')
   assert.equal(typeof result.verdict, 'string')
   assert.ok(Array.isArray(result.blockers))
+})
+
+test('the PR-craft core resolves inside the package before falling back to $HOME', () => {
+  // A published install has no ~/scripts/pr_craft.py, so the core has to come
+  // from the package itself — otherwise drill_pr writes a body nobody scored.
+  assert.match(DEFAULT_PR_CORE, /core[/\\]pr_craft\.py$/, 'the bundled core wins when it exists')
+  assert.ok(existsSync(DEFAULT_PR_CORE), 'and it exists in this checkout')
+
+  const lint = lintPrBody('fix(seq): keep the batch ordered\n\n## What changed\n\n- a\n', { core: DEFAULT_PR_CORE })
+  assert.equal(lint.available, true, 'the bundled core runs')
+  assert.equal(lint.error, null)
 })
 ````
 

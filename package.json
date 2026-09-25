@@ -1,6 +1,6 @@
 {
   "name": "dsh-drill",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Evidence-gated bug-fix drill for DeepSeek Harness: failure signal to symbols, stage gates that a negative lookup cannot satisfy, plugin-run red/green proofs bound to a commit, c2g localization with a tgrep fallback, and a PR body rendered from the ledger.",
   "type": "module",
   "main": "./index.js",
@@ -15,6 +15,7 @@
     "skills",
     "roles",
     "cordis.patch.yml",
+    "core/pr_craft.py",
     "README.md"
   ],
   "dsh": {
@@ -25,7 +26,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "bundle": "node tools/build-source-bundle.mjs"
+    "bundle": "node tools/build-source-bundle.mjs",
+    "prepublishOnly": "npm test"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
@@ -60,5 +62,8 @@
   "homepage": "https://github.com/EnRaiha/dsh-drill-kit#readme",
   "bugs": {
     "url": "https://github.com/EnRaiha/dsh-drill-kit/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
