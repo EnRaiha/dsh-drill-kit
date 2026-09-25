@@ -398,9 +398,10 @@ export function apply(ctx, config) {
           kind: 'locate',
           stage: 'localize',
           cmd: `${found.engine} -n '${definitionPattern(args.symbol)}' ${repo}`,
-          ...(hits.length > 0 ? { files: hits } : {}),
-          text: hits.length > 0 ? `text-level candidates: ${hits.slice(0, 10).join(', ')}`.slice(0, 500) : `no definition-shaped line for ${args.symbol}`,
-          note: 'text-level (no code2graph answer) — confirm the site before treating it as the definition',
+          ...(hits.length > 0 ? { files: hits, text: `text-level candidates: ${hits.slice(0, 10).join(', ')}`.slice(0, 500) } : {}),
+          note: hits.length > 0
+            ? 'text-level (no code2graph answer) — confirm the site before treating it as the definition'
+            : `searched ${found.engine}, no definition-shaped line for ${args.symbol} — the localize gate stays open`,
         })
         const { evaluation } = loadTask(stateRoot, task)
         const summary = summarize(evaluation)
@@ -413,8 +414,8 @@ export function apply(ctx, config) {
         kind: 'locate',
         stage: 'localize',
         cmd: typeof args.symbol === 'string' && args.symbol.length > 0 ? `c2g locate name=${args.symbol}` : `c2g locate frame=${args.file}:${args.line}`,
-        files: rows.map(r => `${r.file}:${r.line}`),
-        text: results.join('; ').slice(0, 500),
+        ...(rows.length > 0 ? { files: rows.map(r => `${r.file}:${r.line}`), text: results.join('; ').slice(0, 500) } : {}),
+        ...(rows.length === 0 ? { note: 'c2g indexed the file but no symbol contains that line' } : {}),
       })
       const { evaluation } = loadTask(stateRoot, task)
       const summary = summarize(evaluation)
@@ -510,10 +511,12 @@ export function apply(ctx, config) {
           kind: 'blast',
           stage: 'blast',
           cmd: `${found.engine} -w -F '${args.symbol}' ${repo}`,
-          symbols: [args.symbol],
-          files,
-          text: `${sites.length} text occurrences in ${files.length} files`.slice(0, 500),
-          note: 'text-level: occurrences, not resolved call sites — a caller/callee claim still needs the graph or a read of the code',
+          ...(sites.length > 0
+            ? { symbols: [args.symbol], files, text: `${sites.length} text occurrences in ${files.length} files`.slice(0, 500) }
+            : {}),
+          note: sites.length > 0
+            ? 'text-level: occurrences, not resolved call sites — a caller/callee claim still needs the graph or a read of the code'
+            : `searched ${found.engine}, no occurrence of ${args.symbol} — the blast gate stays open`,
         })
         const { evaluation } = loadTask(stateRoot, task)
         const summary = summarize(evaluation)
@@ -986,7 +989,17 @@ export function apply(ctx, config) {
       const clean = !lint.available || lint.blockers.length === 0
       const recorded = args.record !== false && clean
       if (recorded) {
-        appendEntry(paths, { task, kind: 'pr', stage: 'pr', bodyPath: out, text: args.title, ...(lint.available ? { note: `lint score ${lint.score ?? '?'} — ${lint.verdict}` } : {}) })
+        const repoDir = active.repo !== undefined ? resolve(String(active.repo)) : cwd
+        const head = headSha(repoDir)
+        appendEntry(paths, {
+          task,
+          kind: 'pr',
+          stage: 'pr',
+          bodyPath: out,
+          text: args.title,
+          ...(head !== null ? { head } : {}),
+          ...(lint.available ? { note: `lint score ${lint.score ?? '?'} — ${lint.verdict}` } : {}),
+        })
       }
 
       const { evaluation } = loadTask(stateRoot, task)

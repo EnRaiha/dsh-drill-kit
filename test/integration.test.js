@@ -485,3 +485,33 @@ test('drill_pr writes the body, lints it, and only records a clean one', { skip 
   assert.equal(pr.bodyPath, clean.bodyPath)
   assert.match(pr.note, /lint score 95/)
 })
+
+test('a lookup that finds nothing does not close the gate it belongs to', { skip }, async () => {
+  const { mkdirSync } = await import('node:fs')
+  const { evaluate } = await import('../lib/gates.js')
+  const repo = join(workspace, 'miss-repo')
+  mkdirSync(repo, { recursive: true })
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, searchEngine: 'rg' }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-miss', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'miss-drill', repo, base: 'HEAD' })
+  const located = await call('drill_locate', { symbol: 'no_such_symbol_anywhere' })
+  assert.equal(located.found, false)
+
+  const ledger = readFileSync(join(repo, '.drill', 'miss-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const locate = ledger.filter(e => e.kind === 'locate').at(-1)
+  assert.ok(locate, 'the attempt is recorded for the audit trail')
+  assert.equal(locate.text, undefined, 'a miss carries no evidence text')
+  assert.match(locate.note, /localize gate stays open/)
+  assert.equal(evaluate(ledger).gates.find(g => g.id === 'localize').ok, false, 'nothing was localized')
+
+  const blasted = await call('drill_blast', { symbol: 'no_such_symbol_anywhere' })
+  assert.equal(blasted.callers.length, 0)
+  const ledger2 = readFileSync(join(repo, '.drill', 'miss-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const blast = ledger2.filter(e => e.kind === 'blast').at(-1)
+  assert.match(blast.note, /blast gate stays open/)
+  assert.equal(evaluate(ledger2).gates.find(g => g.id === 'blast').ok, false)
+})

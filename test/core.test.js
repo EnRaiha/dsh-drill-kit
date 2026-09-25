@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -61,6 +61,20 @@ test('ledger round-trips and hashes logs', () => {
   assert.equal(entries[0].exit, 101)
   assert.match(entries[0].sha256, /^sha256:[0-9a-f]{64}$/)
   assert.deepEqual(readLedger(taskPaths(root, 'missing')), [], 'a missing ledger reads as empty')
+})
+
+test('a torn final line is skipped, but a complete bad line is refused', () => {
+  const paths = taskPaths(root, 'torn')
+  appendEntry(paths, { task: 'torn', kind: 'note', stage: 'localize', text: 'first' })
+  // A writer that died mid-append leaves no trailing newline.
+  appendFileSync(paths.ledger, '{"v":1,"task":"torn","kind":"note"')
+  const entries = readLedger(paths)
+  assert.equal(entries.length, 1, 'the complete record survives the torn tail')
+  assert.equal(entries[0].text, 'first')
+
+  // A complete line that does not parse is corruption, not a torn write.
+  appendFileSync(paths.ledger, '\n{not json}\n')
+  assert.throws(() => readLedger(paths), /not valid JSON/)
 })
 
 test('a corrupted ledger refuses evaluation', () => {
@@ -157,4 +171,17 @@ test('reports name the commit evidence is bound to', () => {
   const md = renderReport('headreport', readLedger(paths), {})
   assert.match(md, /Evidence bound to commit `c{40}`/)
   assert.match(md, /cccccccccccc/)
+})
+
+test('the pr gate reopens when the body describes another commit', () => {
+  const paths = taskPaths(root, 'prhead')
+  appendEntry(paths, { task: 'prhead', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: logFor('prhead-green.log', 'ok\n'), head: 'a'.repeat(40) })
+  appendEntry(paths, { task: 'prhead', kind: 'pr', stage: 'pr', bodyPath: '/tmp/x/PR_BODY.md', head: 'a'.repeat(40) })
+  assert.equal(evaluate(readLedger(paths)).gates.find(g => g.id === 'pr').ok, true)
+
+  // New commits land: the same body now describes a stale commit.
+  appendEntry(paths, { task: 'prhead', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: logFor('prhead-green2.log', 'ok again\n'), head: 'b'.repeat(40) })
+  const reopened = evaluate(readLedger(paths)).gates.find(g => g.id === 'pr')
+  assert.equal(reopened.ok, false, 'a body for an older commit cannot describe the new one')
+  assert.match(reopened.detail, /re-render it on the commit you are pushing/)
 })

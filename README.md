@@ -17,7 +17,7 @@ Built for the NodeDB drill (`red → green → fmt/clippy → preflight → comm
 | | **`green`** | a `test` run with `arm=fix` that **passes**, with a captured log |
 | | **`hygiene`** | a `hygiene` run (fmt/clippy/preflight) with `exit 0` |
 | 5 Review | **`review`** | a `review` record with `verdict=PASS`, `blockers=0`, **and the same commit as the green proof**; a later FAIL or a moved HEAD reopens the gate |
-| 6 PR | `pr` | a `pr` record pointing at the PR body file; `drill_pr` writes it and refuses to record one whose lint has blockers |
+| 6 PR | `pr` | a `pr` record pointing at the PR body file **rendered for the green proof's commit**; `drill_pr` refuses to record one whose lint has blockers, and new commits reopen both `review` and `pr` |
 
 `red`, `green`, `hygiene` and `review` are **required** before `drill_gate` reports `ready`. The rest are advisory gates that describe where the work stopped.
 
@@ -168,6 +168,14 @@ The pipeline's first stage starts from "the stack trace, error logs, input paylo
 - **Marks** toolchain and dependency frames (`/rustc/`, `~/.cargo/registry/`, `node_modules`, `site-packages`) as `external` instead of resolving or dropping them, so the reader can see why nothing was resolved there.
 - **Resolves** each repository frame through the same layers as `drill_locate` — per-worktree c2g cache, then the merged store — and shows both answers when the backtrace names a symbol the graph disagrees with (`→ nextval_batch [Method] (c2g-embed) (backtrace names …::allocate)`).
 - **Records** the whole chain as `locate` evidence, which is what closes the localize gate.
+
+## A miss is a note, not evidence
+
+A `locate`/`blast` search that finds nothing still appends a record — for the audit trail — but carries no `files`, `symbols` or `text`, so the gate it belongs to stays open. (v0.7.0 shipped the opposite: a negative text result closed the gate it was supposed to feed. Fixed in v0.7.1 with a regression test.)
+
+## Ledger concurrency and torn writes
+
+Each record is one synchronous `O_APPEND` write of a newline-terminated line; there is no lock file, so **one writer per task** is the rule. On read, an unterminated final line (the shape a crash mid-append leaves) is skipped, while a complete line that fails to parse refuses evaluation with its line number.
 
 ## The PR body comes from the ledger
 
