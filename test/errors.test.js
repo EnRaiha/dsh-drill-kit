@@ -100,3 +100,35 @@ test('text without frames yields an empty result rather than a wrong one', () =>
   assert.equal(extractMessage('ERROR: relation "x" does not exist'), 'relation "x" does not exist')
   assert.equal(describeFrames([]), '0 repository frame(s)')
 })
+
+test('toolchain and dependency paths are external even when printed relative', () => {
+  // Rust prints a std-internal panic without a leading slash. Reading that as a
+  // repository file localizes the bug to a path that does not exist.
+  assert.equal(normalizeFramePath('library/std/src/panicking.rs').external, true)
+  assert.equal(normalizeFramePath('library/core/src/panicking.rs').external, true)
+  assert.equal(normalizeFramePath('rustc/9c3b/library/std/src/panicking.rs').external, true)
+  assert.equal(normalizeFramePath('node_modules/left-pad/index.js').external, true)
+  assert.equal(normalizeFramePath('.cargo/registry/src/index.crates.io-6f17d22bba15001f/rand-0.8.5/src/rngs/thread.rs').external, true)
+  // The absolute forms keep working.
+  assert.equal(normalizeFramePath('/rustc/abc123/library/std/src/panicking.rs').external, true)
+  assert.equal(normalizeFramePath('/home/maya/.cargo/registry/src/x/rand-0.8.5/src/lib.rs').external, true)
+  assert.equal(normalizeFramePath('/usr/lib/python3.12/site-packages/x.py').external, true)
+  // And a repository that happens to contain such a directory still owns its file:
+  // the prefixes only match at the start of the path.
+  assert.equal(normalizeFramePath('src/library/std/thing.rs').external, false)
+  assert.equal(normalizeFramePath('nodedb/src/control/sequence/registry.rs').external, false)
+})
+
+test('a panic header naming only the standard library yields no repository frame', () => {
+  const onlyExternal = `thread 'main' panicked at library/std/src/panicking.rs:597:5:
+attempt to divide by zero
+stack backtrace:
+   0: std::panicking::begin_panic_handler
+             at /rustc/abc123/library/std/src/panicking.rs:597:5
+   1: core::panicking::panic_fmt
+             at /rustc/abc123/library/core/src/panicking.rs:67:14`
+  const parsed = parseFrames(onlyExternal)
+  assert.ok(parsed.frames.length > 0, 'the frames are parsed, not dropped')
+  assert.equal(parsed.frames.every(f => f.external), true, 'every frame is external')
+  assert.match(describeFrames(parsed.frames), /^0 repository frame\(s\)/)
+})

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { appendFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -12,8 +12,15 @@ import { runCapture } from '../lib/runner.js'
 const root = mkdtempSync(join(tmpdir(), 'drill-test-'))
 after(() => rmSync(root, { recursive: true, force: true }))
 
-const logFor = (name, text = 'output\n') => {
-  const path = join(root, name)
+/**
+ * Write a captured log where the drill itself would put it: under the task's
+ * own logs directory. The ledger refuses a test/hygiene record whose log lives
+ * anywhere else, because otherwise any readable file is a "proof".
+ */
+const logFor = (name, text = 'output\n', task = 'fixtures') => {
+  const dir = join(root, task, 'logs')
+  mkdirSync(dir, { recursive: true })
+  const path = join(dir, name)
   writeFileSync(path, text)
   return path
 }
@@ -54,7 +61,7 @@ test('normalizeEntry validates kind, stage, arm, exit and lists', () => {
 
 test('ledger round-trips and hashes logs', () => {
   const paths = taskPaths(root, 'roundtrip')
-  const log = logFor('round.log', 'red proof\n')
+  const log = logFor('round.log', 'red proof\n', 'roundtrip')
   appendEntry(paths, { task: 'roundtrip', kind: 'test', stage: 'patch', arm: 'base', exit: 101, cmd: 'cargo test', log })
   const entries = readLedger(paths)
   assert.equal(entries.length, 1)
@@ -86,9 +93,9 @@ test('a corrupted ledger refuses evaluation', () => {
 
 test('gates require a real red proof, then green, hygiene and review', () => {
   const paths = taskPaths(root, 'gates')
-  const red = logFor('gates-red.log', 'FAILED\n')
-  const green = logFor('gates-green.log', 'ok\n')
-  const hygiene = logFor('gates-hygiene.log', 'clean\n')
+  const red = logFor('gates-red.log', 'FAILED\n', 'gates')
+  const green = logFor('gates-green.log', 'ok\n', 'gates')
+  const hygiene = logFor('gates-hygiene.log', 'clean\n', 'gates')
 
   appendEntry(paths, { task: 'gates', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: green })
   let evaluation = evaluate(readLedger(paths))
@@ -114,14 +121,14 @@ test('gates require a real red proof, then green, hygiene and review', () => {
 
 test('a passing test on base is not a red proof', () => {
   const paths = taskPaths(root, 'guardnotproof')
-  const log = logFor('guard.log', 'all tests passed\n')
+  const log = logFor('guard.log', 'all tests passed\n', 'guardnotproof')
   appendEntry(paths, { task: 'guardnotproof', kind: 'test', stage: 'patch', arm: 'base', exit: 0, log })
   assert.equal(evaluate(readLedger(paths)).gates.find(g => g.id === 'red').ok, false)
 })
 
 test('report renders verdict, gate table and test evidence', () => {
   const paths = taskPaths(root, 'report')
-  const log = logFor('report-red.log', 'boom\n')
+  const log = logFor('report-red.log', 'boom\n', 'report')
   appendEntry(paths, { task: 'report', kind: 'test', stage: 'patch', arm: 'base', exit: 1, cmd: 'cargo nextest run', log })
   const md = renderReport('report', readLedger(paths), { repo: '/x/nodedb', base: 'origin/main' })
   assert.match(md, /# Drill report — report/)
@@ -147,10 +154,10 @@ test('runner captures exit codes, output and timeouts', async () => {
 
 test('the review gate reopens when the reviewed commit is not the green commit', () => {
   const paths = taskPaths(root, 'headbind')
-  appendEntry(paths, { task: 'headbind', kind: 'test', stage: 'patch', arm: 'base', exit: 101, log: logFor('headbind-red.log', 'boom\n') })
-  const green = logFor('headbind-green.log', 'ok\n')
+  appendEntry(paths, { task: 'headbind', kind: 'test', stage: 'patch', arm: 'base', exit: 101, log: logFor('headbind-red.log', 'boom\n', 'headbind') })
+  const green = logFor('headbind-green.log', 'ok\n', 'headbind')
   appendEntry(paths, { task: 'headbind', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: green, head: 'a'.repeat(40) })
-  appendEntry(paths, { task: 'headbind', kind: 'hygiene', stage: 'patch', exit: 0, log: logFor('headbind-hyg.log', 'clean\n') })
+  appendEntry(paths, { task: 'headbind', kind: 'hygiene', stage: 'patch', exit: 0, log: logFor('headbind-hyg.log', 'clean\n', 'headbind') })
 
   appendEntry(paths, { task: 'headbind', kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0, head: 'b'.repeat(40) })
   let evaluation = evaluate(readLedger(paths))
@@ -167,7 +174,7 @@ test('the review gate reopens when the reviewed commit is not the green commit',
 
 test('reports name the commit evidence is bound to', () => {
   const paths = taskPaths(root, 'headreport')
-  appendEntry(paths, { task: 'headreport', kind: 'test', stage: 'patch', arm: 'base', exit: 1, cmd: 'cargo test', log: logFor('headreport-red.log', 'boom\n'), head: 'c'.repeat(40) })
+  appendEntry(paths, { task: 'headreport', kind: 'test', stage: 'patch', arm: 'base', exit: 1, cmd: 'cargo test', log: logFor('headreport-red.log', 'boom\n', 'headreport'), head: 'c'.repeat(40) })
   const md = renderReport('headreport', readLedger(paths), {})
   assert.match(md, /Evidence bound to commit `c{40}`/)
   assert.match(md, /cccccccccccc/)
@@ -175,13 +182,84 @@ test('reports name the commit evidence is bound to', () => {
 
 test('the pr gate reopens when the body describes another commit', () => {
   const paths = taskPaths(root, 'prhead')
-  appendEntry(paths, { task: 'prhead', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: logFor('prhead-green.log', 'ok\n'), head: 'a'.repeat(40) })
+  appendEntry(paths, { task: 'prhead', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: logFor('prhead-green.log', 'ok\n', 'prhead'), head: 'a'.repeat(40) })
   appendEntry(paths, { task: 'prhead', kind: 'pr', stage: 'pr', bodyPath: '/tmp/x/PR_BODY.md', head: 'a'.repeat(40) })
   assert.equal(evaluate(readLedger(paths)).gates.find(g => g.id === 'pr').ok, true)
 
   // New commits land: the same body now describes a stale commit.
-  appendEntry(paths, { task: 'prhead', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: logFor('prhead-green2.log', 'ok again\n'), head: 'b'.repeat(40) })
+  appendEntry(paths, { task: 'prhead', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: logFor('prhead-green2.log', 'ok again\n', 'prhead'), head: 'b'.repeat(40) })
   const reopened = evaluate(readLedger(paths)).gates.find(g => g.id === 'pr')
   assert.equal(reopened.ok, false, 'a body for an older commit cannot describe the new one')
   assert.match(reopened.detail, /re-render it on the commit you are pushing/)
+})
+
+test('a review record that names no commit cannot close the review gate', () => {
+  // Rule 4: review evidence is bound to a commit. A hand-written `review` record
+  // passed through drill_record without a `head` used to slip past the
+  // "reviewed the green proof" check, because a missing head read as "not stale".
+  const green = { kind: 'test', stage: 'patch', arm: 'fix', exit: 0, sha256: 'sha256:aa', head: 'a'.repeat(40) }
+  const unbound = evaluate([green, { kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0 }])
+  assert.equal(unbound.gates.find(g => g.id === 'review').ok, false, 'no commit named, no gate closed')
+  assert.match(unbound.gates.find(g => g.id === 'review').detail, /names no commit/)
+
+  const wrong = evaluate([green, { kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0, head: 'b'.repeat(40) }])
+  assert.equal(wrong.gates.find(g => g.id === 'review').ok, false, 'a review of another commit stays open')
+
+  const bound = evaluate([green, { kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0, head: 'a'.repeat(40) }])
+  assert.equal(bound.gates.find(g => g.id === 'review').ok, true, 'the same commit closes it')
+
+  // Without a green proof there is no commit to bind to: behaviour is unchanged.
+  const noGreen = evaluate([{ kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0 }])
+  assert.equal(noGreen.gates.find(g => g.id === 'review').ok, true)
+})
+
+test('the ledger refuses an unarmed test, a logless hygiene run, and a foreign log', () => {
+  // An unarmed test record closes neither red nor green, so it is noise that
+  // looks like proof.
+  assert.throws(
+    () => normalizeEntry({ task: 't1', kind: 'test', stage: 'patch', exit: 0, log: logFor('unarmed.log', 'ok\n', 't1') }, { logsDir: join(root, 't1', 'logs') }),
+    /must carry `arm`/,
+  )
+  // `hygiene` needs a log too, not only `test`.
+  assert.throws(
+    () => normalizeEntry({ task: 't1', kind: 'hygiene', stage: 'patch', exit: 0 }, { logsDir: join(root, 't1', 'logs') }),
+    /must carry `log`/,
+  )
+
+  // Rule 3: only the executor produces a proof. A readable file elsewhere is
+  // not a run's captured output.
+  const paths = taskPaths(root, 'provenance')
+  const foreign = logFor('elsewhere.log', 'all green\n', 'somewhere-else')
+  assert.throws(
+    () => appendEntry(paths, { task: 'provenance', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: foreign }),
+    /must be captured by the drill/,
+  )
+
+  // The same record with the log where drill_run writes it is accepted.
+  const own = logFor('own.log', 'all green\n', 'provenance')
+  const ok = appendEntry(paths, { task: 'provenance', kind: 'test', stage: 'patch', arm: 'fix', exit: 0, log: own })
+  assert.match(ok.sha256, /^sha256:[0-9a-f]{64}$/)
+})
+
+test('a test killed by a signal is still recordable as a red proof', async () => {
+  // The canonical red proof can be a segfault: the child reports code null and
+  // a signal name, and the ledger needs an integer exit code.
+  const killed = await runCapture({ command: 'kill -SEGV $$', logPath: join(root, 'sigsegv.log') })
+  assert.equal(killed.signal, 'SIGSEGV')
+  assert.equal(killed.exit, 139, '128 + SIGSEGV(11), the code a shell reports')
+
+  const paths = taskPaths(root, 'signal-red')
+  const log = logFor('signal-red.log', 'Segmentation fault\n', 'signal-red')
+  const normalized = appendEntry(paths, {
+    task: 'signal-red',
+    kind: 'test',
+    stage: 'patch',
+    arm: 'base',
+    exit: killed.exit,
+    cmd: 'cargo test',
+    log,
+    note: `killed by ${killed.signal}`,
+  })
+  assert.equal(normalized.exit, 139)
+  assert.equal(evaluate(readLedger(paths)).gates.find(g => g.id === 'red').ok, true, 'a signal-killed run is a valid red proof')
 })

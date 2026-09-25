@@ -560,3 +560,147 @@ test('a text-search miss is a note, not evidence — even when it is recorded as
   assert.deepEqual(hit.files, [join(repo, 'b.txt')])
   assert.equal(evaluate(ledger2).gates.find(g => g.id === 'localize').ok, true, 'a hit closes the gate')
 })
+
+test('a backtrace with no repository frame is a note, not localization', { skip }, async () => {
+  const { mkdirSync } = await import('node:fs')
+  const { evaluate } = await import('../lib/gates.js')
+  const repo = join(workspace, 'external-only-repo')
+  mkdirSync(repo, { recursive: true })
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, searchEngine: 'rg' }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-external', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'external-only', repo, base: 'HEAD' })
+  // A panic that only ever shows dependency and toolchain frames: the drill has
+  // learned nothing about where in *this* repository the bug lives.
+  const failure = [
+    'thread "main" panicked at library/std/src/panicking.rs:597:5:',
+    'attempt to divide by zero',
+    'stack backtrace:',
+    '   0: std::panicking::begin_panic_handler',
+    '             at /rustc/9c3b1a1b1b1b1b1b1b1b1b1b1b1b1b1b/library/std/src/panicking.rs:597:5',
+    '   1: core::panicking::panic_fmt',
+    '             at /rustc/9c3b1a1b1b1b1b1b1b1b1b1b1b1b1b1b/library/core/src/panicking.rs:72:14',
+    '   2: rand::rngs::thread_rng',
+    '             at /home/maya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rand-0.8.5/src/rngs/thread.rs:64:9',
+  ].join('\n')
+
+  const parsed = await call('drill_error', { error: failure })
+  assert.equal(parsed.external, parsed.frames.length, 'every frame is external')
+  assert.equal(parsed.resolved, 0)
+
+  const ledger = readFileSync(join(repo, '.drill', 'external-only', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const entry = ledger.filter(e => e.kind === 'locate').at(-1)
+  assert.ok(entry, 'the attempt is still recorded, for the audit trail')
+  assert.equal(entry.text, undefined, 'a backtrace with no repository frame carries no evidence text')
+  assert.equal(entry.files, undefined, 'and names no repository file')
+  assert.match(entry.note, /localize gate stays open/)
+  assert.equal(evaluate(ledger).gates.find(g => g.id === 'localize').ok, false, 'nothing in this repository was localized')
+})
+
+test('a hand-written review closes its gate only when it names the green commit', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const { evaluate } = await import('../lib/gates.js')
+  const repo = join(workspace, 'hand-review-repo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+  const head = git('rev-parse', 'HEAD')
+  const ledgerPath = join(repo, '.drill', 'hand-review', 'ledger.jsonl')
+  const readLedgerLines = () => readFileSync(ledgerPath, 'utf8').trim().split('\n').map(JSON.parse)
+  const gate = id => evaluate(readLedgerLines()).gates.find(g => g.id === id)
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, searchEngine: 'rg' }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-hand-review', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'hand-review', repo, base: 'HEAD' })
+  const green = await call('drill_run', { cmd: 'true', stage: 'patch', kind: 'test', arm: 'fix' })
+  assert.equal(green.exit, 0)
+
+  // `head` is a real parameter now, and it is not filled in for the caller:
+  // a review that names no commit cannot close the gate.
+  await call('drill_record', { kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0, text: 'looked at it' })
+  assert.equal(gate('review').ok, false, 'an unbound review record cannot close the gate')
+  assert.match(gate('review').detail, /names no commit/)
+
+  await call('drill_record', { kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0, text: 'looked at it', head })
+  assert.equal(gate('review').ok, true, 'naming the green commit closes it')
+
+  const recorded = readLedgerLines().filter(e => e.kind === 'review').at(-1)
+  assert.equal(recorded.head, head)
+})
+
+test('a store hit that resolves to no file in this worktree is not localization', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const { evaluate } = await import('../lib/gates.js')
+  const worktree = join(workspace, 'foreign-worktree')
+  const store = join(workspace, 'Embed2', 'c2g', 'graph_index.sqlite')
+  mkdirSync(join(workspace, 'Embed2', 'c2g'), { recursive: true })
+  mkdirSync(join(worktree, 'nodedb', 'src'), { recursive: true })
+  execFileSync('sqlite3', [store], { input: `
+    CREATE TABLE nodes(id TEXT PRIMARY KEY, name TEXT, kind TEXT, file TEXT, repo TEXT, line INTEGER);
+    CREATE TABLE links(source TEXT, target TEXT, relation TEXT);
+    INSERT INTO nodes VALUES ('n1','ghost_fn','Function','nd_src/control/ghost.rs','nd_src',7);
+  ` })
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedStore: store }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-foreign', header: { cwd: worktree } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'foreign-drill', repo: worktree, base: 'HEAD' })
+  const located = await call('drill_locate', { symbol: 'ghost_fn' })
+  assert.match(located.source, /c2g-embed/, 'the store still answered')
+
+  const ledger = readFileSync(join(worktree, '.drill', 'foreign-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const entry = ledger.filter(e => e.kind === 'locate').at(-1)
+  assert.equal(entry.text, undefined, 'nothing in this worktree was localized, so there is no evidence text')
+  assert.equal(entry.files, undefined)
+  assert.match(entry.note, /none resolves to a file in this worktree/)
+  assert.equal(evaluate(ledger).gates.find(g => g.id === 'localize').ok, false, 'the gate stays open')
+})
+
+test('drill_diff says so when the base ref could not be compared', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'fallback-diff-repo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+  // Uncommitted work, and a base ref that does not exist in this repo.
+  writeFileSync(join(repo, 'a.rs'), 'fn a() { let _ = 1; }\n')
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), c2gEnabled: false, embedEnabled: false }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-fallback', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'fallback-diff', repo, base: 'origin/main' })
+  const diff = await call('drill_diff', {})
+  assert.deepEqual(diff.changed, ['a.rs'], 'the worktree diff still answers')
+
+  const ledger = readFileSync(join(repo, '.drill', 'fallback-diff', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const blast = ledger.filter(e => e.kind === 'blast').at(-1)
+  assert.equal(blast.base, undefined, 'a base that was never compared is not recorded')
+  assert.equal(blast.cmd, 'git diff --name-only --diff-filter=ACMR HEAD')
+  assert.match(blast.note, /working-tree diff against HEAD/)
+})

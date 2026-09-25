@@ -17,7 +17,7 @@ Built for the NodeDB drill (`red → green → fmt/clippy → preflight → comm
 | | **`green`** | a `test` run with `arm=fix` that **passes**, with a captured log |
 | | **`hygiene`** | a `hygiene` run (fmt/clippy/preflight) with `exit 0` |
 | 5 Review | **`review`** | a `review` record with `verdict=PASS`, `blockers=0`, **and the same commit as the green proof**; a later FAIL or a moved HEAD reopens the gate |
-| 6 PR | `pr` | a `pr` record pointing at the PR body file **rendered for the green proof's commit**; `drill_pr` refuses to record one whose lint has blockers, and new commits reopen both `review` and `pr` |
+| 6 PR | `pr` | a `pr` record pointing at the PR body file **rendered for the green proof's commit**; `drill_pr` records one only when the lint ran without blockers, and new commits reopen both `review` and `pr` |
 
 `red`, `green`, `hygiene` and `review` are **required** before `drill_gate` reports `ready`. The rest are advisory gates that describe where the work stopped.
 
@@ -26,16 +26,16 @@ Built for the NodeDB drill (`red → green → fmt/clippy → preflight → comm
 | Tool | What it does |
 |---|---|
 | `drill_start` | open a task: ledger + `active.json` + gate report |
-| `drill_error` | stage 1 from the signal: parse a panic, backtrace, compiler diagnostic or traceback into `file:line` frames and resolve each frame to its symbol (cache → merged store). Records `locate`. |
+| `drill_error` | stage 1 from the signal: parse a panic, backtrace, compiler diagnostic or traceback into `file:line` frames and resolve each frame to its symbol (cache → merged store). Toolchain and dependency frames — including a relative `library/std/…` panic header — are marked `external`, and a signal with no repository frame records a note instead of `locate` evidence. |
 | `drill_locate` | stage 1 over the local c2g cache: symbol name, or `file`+`line` from a stack frame → exact definition. Records `locate`. |
 | `drill_blast` | stage 2 over the same cache: call sites, transitive callers to a bounded depth, callees. Records `blast`. |
-| `drill_diff` | stage 2b from git: changed files against the base ref, deleted files, the files that depend on them (c2g reverse edges), and a proposed manual-test checklist. Records `blast`. |
+| `drill_diff` | stage 2b from git: changed files against the base ref, deleted files, the files that depend on them (c2g reverse edges), and a proposed manual-test checklist. Records `blast` — and if the base ref cannot be compared it falls back to the worktree diff, recording the fallback command and a note instead of a `base` it never used. |
 | `drill_search` | text search with `tgrep` (trigram index) or `rg`: for questions the graph cannot answer — a config key, an error string, a SQL fragment, a doc claim. Optionally records the hits as `locate`/`blast`/`edge` evidence, always labelled text-level. |
 | `drill_index` | build or refresh the **out-of-tree** tgrep index for the drill repository, so stages 1–2 stop scanning: the index lands in the cache directory, never inside the worktree, and `git status` stays clean. Prunes idle indexes on the way. |
 | `drill_cache` | `status` / `prune` / `clear` the derived cache: sizes, entry counts, the idle TTL, and what pruning freed. |
-| `drill_pr` | stage 7: render the PR body from the ledger (why, changed files, red/green/preflight rows with exit codes and commits, Review 2 verdict, gate table), write it, score it with the PR-craft core, and record `pr` evidence only when the lint has no blockers. |
-| `drill_run` | run a command, stream output into `.drill/<task>/logs/`, hash the log, record the exit code **and the commit it ran on**. This is the only way to produce a test proof. |
-| `drill_record` | record non-command evidence: locate/blast/edge/review/pr/note |
+| `drill_pr` | stage 7: render the PR body from the ledger (why, changed files, red/green/preflight rows with exit codes and commits, Review 2 verdict, gate table), write it, score it with the PR-craft core, and record `pr` evidence only when the lint ran without blockers (a crashed lint is not a clean body). |
+| `drill_run` | run a command, stream output into `.drill/<task>/logs/`, hash the log, record the exit code **and the commit it ran on**. This is the only way to produce a test proof: a `test`/`hygiene` record whose log sits outside the task's `logs/` directory is refused. A child killed by a signal is recorded as `128 + signo` (SIGSEGV → 139) with the signal in `note` — "it crashes on base" is a red proof, not a missing record. |
+| `drill_record` | record non-command evidence: locate/blast/edge/review/pr/note. Refuses an unarmed `test`, a `test`/`hygiene` record without a log, and a log outside the task's own `logs/` directory; takes an explicit `head` so a hand-recorded `review`/`pr` can be bound to the commit it reviewed. |
 | `drill_gate` | which gates hold, which are open, and what the next step is |
 | `drill_status` | active task, record count, last records, gate state |
 | `drill_report` | render the report (gate table + test evidence with exit codes and log hashes) and write `.drill/<task>/report.md` |
@@ -175,9 +175,9 @@ The pipeline's first stage starts from "the stack trace, error logs, input paylo
 
 A lookup that finds nothing still appends a record — for the audit trail — but carries no `files`, `symbols` or `text`, so the gate it belongs to stays open.
 
-The rule reaches every tool that can write one of those kinds: `drill_locate`, `drill_blast`, and `drill_search` when it is asked to record (`kind: locate|blast|edge`). A zero-hit `drill_search` writes the search it ran and `… — the <gate> gate stays open`, never a `text` field that the gate would count.
+The rule reaches every tool that can write one of those kinds: `drill_locate`, `drill_blast`, `drill_search` when it is asked to record (`kind: locate|blast|edge`), `drill_error` when every frame is toolchain or dependency, and `drill_locate`'s merged-store fallback when the store knows the symbol but no hit resolves to a file in this worktree. Each of them writes the command it ran and `… — the <gate> gate stays open`, never a `text` field that the gate would count.
 
-That last path is where the fix took three releases, and the sequence is worth keeping: **v0.7.0** shipped the bug (a negative result closed the gate it was supposed to feed), **v0.7.1** fixed `drill_locate`/`drill_blast` and added a regression test, and **v0.7.3** found that `drill_search` still wrote `text: "no hits for <pattern>"` on a zero-hit search — the same bug, on the one recording path the earlier fix had not touched. Its test is two-sided: a miss stays open **and** a hit closes the gate, so "never closes" cannot pass either.
+That path is where the fix took four releases, and the sequence is worth keeping: **v0.7.0** shipped the bug (a negative result closed the gate it was supposed to feed), **v0.7.1** fixed `drill_locate`/`drill_blast` and added a regression test, **v0.7.3** found that `drill_search` still wrote `text: "no hits for <pattern>"` on a zero-hit search, and the **v0.8.0 end-to-end review** found the same shape in two more places — `drill_error` on a backtrace with no repository frame, and the merged-store fallback when every hit lives in another worktree. Each test is two-sided where it can be: a miss stays open **and** a hit closes the gate, so "never closes" cannot pass either.
 
 ## Ledger concurrency and torn writes
 
@@ -219,7 +219,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 
 - **`drill_diff`** — the branch diff becomes blast evidence: `--diff-filter=ACMR` changed files, deletions reported separately, dependents walked backwards over c2g `Call`/`Read`/`TypeRef` edges to a bounded depth, plus a proposed manual-test checklist (one happy-path and one refusal line per changed file, one line per dependent). The checklist is an *input* to stage 3 — the `edge` gate still requires your own invariants, so a diff cannot close it by itself.
 - **`drill_review` is role-driven** — persona, tool policy and budget come from `roles/drill-auditor.md` resolved project → user → bundled, with unknown frontmatter keys reported. A role naming a tool the agent cannot see degrades to the visible subset instead of failing the delegation. `FALLBACK_PERSONA`/read-only defaults still apply when no role file exists.
-- **Evidence is bound to a commit** — `drill_run` records `head` + `branch`; `drill_review` records `head`. The `review` gate reopens when HEAD moved after the review, and the report names the commit evidence belongs to (or lists the commits it spans).
+- **Evidence is bound to a commit** — `drill_run` records `head` + `branch`; `drill_review` records `head`. The `review` gate reopens when HEAD moved after the review, and the report names the commit evidence belongs to (or lists the commits it spans). A review that names **no** commit is as stale as one that names the wrong one — v0.8.0 closed the hole where a head-less record skipped the comparison entirely.
 - **`lib/git.js`** — read-only git queries (`rev-parse HEAD`, branch, `diff --name-only`) that answer null/empty outside a repository instead of throwing.
 - **`drill_search` + `lib/search.js`** — tgrep/rg text search as the honest fallback for stages 1–2, with engine auto-selection and text-level labelling.
 - **`drill_error` + `drill_pr`** — the drill now starts from the failure signal (frames resolved to symbols, toolchain frames marked external) and ends with a PR body rendered from the ledger and scored by the shared PR-craft core, recorded only when the lint is clean.
@@ -230,7 +230,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 88 tests
+npm test        # node --test test/*.test.js — 97 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts

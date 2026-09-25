@@ -71,6 +71,7 @@ export const Config = z.object({
   prLint: z.boolean().default(true),
   prCore: z.string().default(''),
   pythonBin: z.string().default('python3'),
+  requireLog: z.boolean().default(true),
   errorMaxResolve: z.number().min(1).max(40).step(1).default(12),
   embedEnabled: z.boolean().default(true),
   embedStore: z.string().default(''),
@@ -397,9 +398,15 @@ export function apply(ctx, config) {
               kind: 'locate',
               stage: 'localize',
               cmd: `c2g-embed locate name=${args.symbol} store=${store.path}`,
-              ...(files.length > 0 ? { files } : {}),
-              text: results.join('; ').slice(0, 500),
-              note: `merged c2g store${store.builtAt !== null ? ` built ${store.builtAt}` : ''} (shard-relative paths mapped to this worktree)`,
+              // Every hit lives in another shard or worktree: the store answered,
+              // but this task still has no file to patch, so the record is a note
+              // and the localize gate stays open (rule 8).
+              ...(files.length > 0
+                ? { files, text: results.join('; ').slice(0, 500) }
+                : {}),
+              note: files.length > 0
+                ? `merged c2g store${store.builtAt !== null ? ` built ${store.builtAt}` : ''} (shard-relative paths mapped to this worktree)`
+                : `merged c2g store${store.builtAt !== null ? ` built ${store.builtAt}` : ''} knows ${results.length} symbol(s) by that name, but none resolves to a file in this worktree — no localization, the localize gate stays open`,
             })
             const { evaluation } = loadTask(stateRoot, task)
             const summary = summarize(evaluation)
@@ -438,7 +445,7 @@ export function apply(ctx, config) {
         cmd: typeof args.symbol === 'string' && args.symbol.length > 0 ? `c2g locate name=${args.symbol}` : `c2g locate frame=${args.file}:${args.line}`,
         ...(rows.length > 0 ? { note: c2gNote(info) } : {}),
         ...(rows.length > 0 ? { files: rows.map(r => `${r.file}:${r.line}`), text: results.join('; ').slice(0, 500) } : {}),
-        ...(rows.length === 0 ? { note: 'c2g indexed the file but no symbol contains that line' } : {}),
+        ...(rows.length === 0 ? { note: db === null ? 'no c2g cache covers this worktree and no symbol was given — the localize gate stays open' : 'c2g indexed the file but no symbol contains that line' } : {}),
       })
       const { evaluation } = loadTask(stateRoot, task)
       const summary = summarize(evaluation)
@@ -865,7 +872,7 @@ export function apply(ctx, config) {
           value.message === undefined ? 'no message extracted' : `message: ${value.message}`,
           `frames: ${value.frames.length} (${value.resolved} resolved, ${value.unresolved} unresolved, ${value.external} external)`,
           value.frames.slice(0, 15).join('\n'),
-          `resolved via: ${value.sources}${value.recorded ? ' · recorded as locate evidence' : ''}`,
+          `resolved via: ${value.sources}${value.recorded ? (value.frames.length > 0 && value.external === value.frames.length ? ' · recorded as a note only — no repository frame, the localize gate stays open' : ' · recorded as locate evidence') : ''}`,
           `gates: ${value.gates.join(' ')}`,
           `next: ${value.next}`,
         ].join('\n'),
@@ -929,6 +936,7 @@ export function apply(ctx, config) {
       })
       const resolved = frames.filter(f => f.symbol !== null).length
       const external = frames.filter(f => f.external).length
+      const located = frames.filter(f => !f.external).map(f => `${f.file}:${f.line}`)
       const recorded = args.record !== false && parsed.frames.length > 0
 
       if (recorded) {
@@ -937,9 +945,19 @@ export function apply(ctx, config) {
           kind: 'locate',
           stage: 'localize',
           cmd: `drill_error frames=${frames.length}`,
-          files: frames.filter(f => !f.external).map(f => `${f.file}:${f.line}`),
-          text: [parsed.message ?? 'no message extracted', ...rendered.slice(0, 8)].join(' | ').slice(0, 500),
-          note: `${describeFrames(frames)}; resolved ${resolved} via ${[...sources].join('+') || 'nothing'}`,
+          // A signal made only of toolchain and dependency frames says nothing
+          // about where in this repository the bug lives (rule 8): it is
+          // recorded as a note, with no `files` and no `text`, so it cannot
+          // close the localize gate on its own.
+          ...(located.length > 0
+            ? {
+                files: located,
+                text: [parsed.message ?? 'no message extracted', ...rendered.slice(0, 8)].join(' | ').slice(0, 500),
+              }
+            : {}),
+          note: located.length > 0
+            ? `${describeFrames(frames)}; resolved ${resolved} via ${[...sources].join('+') || 'nothing'}`
+            : `${describeFrames(frames)} — no repository frame in this signal; the localize gate stays open`,
         })
       }
       const { evaluation } = loadTask(stateRoot, task)
@@ -1022,7 +1040,9 @@ export function apply(ctx, config) {
       const lint = config.prLint
         ? lintPrBody(body, { core: config.prCore && config.prCore.length > 0 ? config.prCore : undefined, pythonBin: config.pythonBin })
         : { available: false, ok: null, score: null, verdict: 'lint disabled', blockers: [], good: [], error: null }
-      const clean = !lint.available || lint.blockers.length === 0
+      // `available: true` with an `error` means the lint ran and crashed; that is
+      // not a clean body, so the `pr` record must not be written on it.
+      const clean = !lint.available || (lint.blockers.length === 0 && (lint.error ?? null) === null)
       const recorded = args.record !== false && clean
       if (recorded) {
         const repoDir = active.repo !== undefined ? resolve(String(active.repo)) : cwd
@@ -1074,6 +1094,8 @@ export function apply(ctx, config) {
       files: { type: 'array', items: { type: 'string' }, description: 'Files or file:line anchors this evidence names.' },
       symbols: { type: 'array', items: { type: 'string' }, description: 'Symbols this evidence names.' },
       bodyPath: { type: 'string', description: 'For pr records: path to the PR body file.' },
+      head: { type: 'string', description: 'Commit this evidence belongs to. A `review` or `pr` record needs it to close its gate once a green proof names a commit — an unbound record stays open, and there is no auto-fill, so name the commit you actually reviewed.' },
+      branch: { type: 'string', description: 'Branch the evidence was produced on.' },
     },
     output: {
       schema: {
@@ -1119,6 +1141,7 @@ export function apply(ctx, config) {
           exit: { type: 'integer', required: true },
           log: { type: 'string', required: true },
           timedOut: { type: 'boolean', required: true },
+          signal: { type: 'string' },
           durationMs: { type: 'integer', required: true },
           gates: { type: 'array', required: true, items: { type: 'string' } },
           next: { type: 'string', required: true },
@@ -1159,13 +1182,13 @@ export function apply(ctx, config) {
           ...(args.arm !== undefined ? { arm: args.arm } : {}),
           ...(head !== null ? { head } : {}),
           ...(branch !== null ? { branch } : {}),
-          note: run.timedOut ? 'timed out' : undefined,
+          note: run.timedOut ? 'timed out' : (run.signal === null || run.signal === undefined ? undefined : `killed by ${run.signal}`),
         },
         { requireLog: config.requireLog },
       )
       const { evaluation } = loadTask(stateRoot, task)
       const summary = summarize(evaluation)
-      return { exit: run.exit, log: run.logPath, timedOut: run.timedOut, durationMs: run.durationMs, gates: summary.gates, next: summary.next }
+      return { exit: run.exit, log: run.logPath, timedOut: run.timedOut, ...(run.signal !== null && run.signal !== undefined ? { signal: run.signal } : {}), durationMs: run.durationMs, gates: summary.gates, next: summary.next }
     },
   })
 
@@ -1208,7 +1231,7 @@ export function apply(ctx, config) {
       const base = args.base ?? active.base ?? 'origin/main'
       const depth = args.depth ?? config.rippleDepth
 
-      const { changed, deleted, error } = diffFiles(repo, base)
+      const { changed, deleted, error, fallback, fallbackCmd, fallbackReason } = diffFiles(repo, base)
       const db = c2gDb(repo, config)
       const ripple = new Set()
       if (db !== null) {
@@ -1248,10 +1271,13 @@ export function apply(ctx, config) {
           task,
           kind: 'blast',
           stage: 'blast',
-          cmd: `git diff --name-only --diff-filter=ACMR ${base}...HEAD`,
-          base,
+          // When the base comparison failed, say what was compared instead of
+          // labelling a worktree diff with a base that was never used.
+          cmd: fallback === true ? fallbackCmd : `git diff --name-only --diff-filter=ACMR ${base}...HEAD`,
+          ...(fallback === true ? {} : { base }),
           files: [...changed, ...ripple],
           text: `${changed.length} changed, ${ripple.size} dependent (depth ${depth})`.slice(0, 500),
+          ...(fallback === true ? { note: fallbackReason } : {}),
         })
       }
 
