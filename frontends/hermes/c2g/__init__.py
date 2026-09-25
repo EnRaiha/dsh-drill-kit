@@ -1,7 +1,7 @@
 """c2g — straight code2graph access for Hermes (dbless).
 
 Registers 8 tools. All logic lives in the shared stdlib-only core
-/home/maya/scripts/c2g_tools.py (same core the Kilo plugin bridges into), so the
+core/c2g_tools.py in this repository (the same core the Kilo plugin bridges into), so the
 two frontends stay in sync. No NodeDB, no PG, no cortex.
 """
 

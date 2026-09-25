@@ -1,13 +1,16 @@
 import type { Plugin, PluginInput } from "@kilocode/plugin"
 import { tool } from "@kilocode/plugin/tool"
 import { spawnSync } from "node:child_process"
-import { appendFileSync } from "node:fs"
+import { appendFileSync, existsSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 /**
  * c2g — straight code2graph access for Kilo, bypassing Maya cortex.
  *
  * DB-less: shells out to the c2g binary through the shared stdlib core
- * /home/maya/scripts/c2g_tools.py (same core the Hermes plugin uses). No
+ * core/c2g_tools.py in this repository — the same core the Hermes plugin uses. No
  * NodeDB, no PG. The same questions can also be asked through
  * cortex_codegraph_* (NodeDB code graph) and knowledge-graph_* (PG store)
  * when those are warm — this plugin is the direct path.
@@ -16,8 +19,12 @@ import { appendFileSync } from "node:fs"
  *          c2g_diff_impact, c2g_query, c2g_raw
  */
 
-const CORE = process.env.C2G_CORE ?? "/home/maya/scripts/c2g_tools.py"
-const LOG = "/home/maya/logs/c2g.log"
+// Core resolution: an explicit override, else this kit's copy, else the usual
+// home-directory install. Being repo-relative is what lets a checkout run the
+// frontend against core/ without copying anything.
+const REPO_CORE = fileURLToPath(new URL("../../core/c2g_tools.py", import.meta.url))
+const CORE = process.env.C2G_CORE ?? (existsSync(REPO_CORE) ? REPO_CORE : join(homedir(), "scripts", "c2g_tools.py"))
+const LOG = process.env.C2G_LOG ?? join(homedir(), "logs", "c2g.log")
 const MAX_RENDER = 8_000
 const QUERY_TIMEOUT_MS = 200_000
 const INDEX_TIMEOUT_MS = 900_000
@@ -67,7 +74,7 @@ function body(d: Json): string {
 }
 
 function render(d: Json | null): string {
-  if (!d) return "❌ c2g core unreachable (python3 /home/maya/scripts/c2g_tools.py)."
+  if (!d) return `❌ c2g core unreachable (python3 ${CORE}).`
   if (d.tool === "blast_radius" && d.parts) {
     const parts = d.parts as Record<string, Json>
     let out = `# c2g_blast_radius — \`${String(d.name)}\`\n`

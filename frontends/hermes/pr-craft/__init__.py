@@ -1,7 +1,7 @@
 """pr-craft — PR & code-review craft for Hermes.
 
 Registers 5 tools, the pre_llm_call context-injection hook, and a /pr command.
-All logic lives in the shared stdlib-only core /home/maya/scripts/pr_craft.py
+All logic lives in the shared stdlib-only core core/pr_craft.py
 (same core the Kilo plugin bridges into), so the two stay in sync.
 """
 

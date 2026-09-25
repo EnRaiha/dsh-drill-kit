@@ -121,7 +121,7 @@ The plugin also registers one `agent/turn-stopping` listener: while an active ta
 
 ```sh
 # from this checkout (dev): link into a profile, then boot
-dsh plugin --profile <profile> add /home/maya/projects/dsh-drill
+dsh plugin --profile <profile> add ~/projects/dsh-drill
 node apps/cli/lib/cli.js <profile> --dump-config | grep -A2 'id: drill'
 ```
 
@@ -131,7 +131,7 @@ The plugin row ships in `cordis.patch.yml` as one entry (`id: drill`, `name: dsh
 
 ```sh
 mkdir -p node_modules/@deepseek-ai
-H=/home/maya/projects/deepseek-harness
+H=${DSH_CHECKOUT:-$HOME/projects/deepseek-harness}
 ln -sfn $H/packages/core/tools       node_modules/@deepseek-ai/dsh-tools
 ln -sfn $H/packages/llm/llm          node_modules/@deepseek-ai/dsh-llm
 ln -sfn $H/packages/subagent/subagent node_modules/@deepseek-ai/dsh-subagent
@@ -229,7 +229,7 @@ Measured on `nodedb-296` (no per-worktree cache, merged store present):
 
 ```
 drill_start  → stage 1–2: no per-worktree c2g cache, merged c2g store available
-               (/home/maya/Embed/c2g/graph_index.sqlite (built 2026-09-24T05:24:54+0800)); tgrep index ready
+               (~/Embed/c2g/graph_index.sqlite (built 2026-09-24T05:24:54+0800)); tgrep index ready
 drill_locate nextval_batch → nodedb/src/control/sequence/registry.rs:227 (nd_src)
                              nodedb/src/control/sequence/types.rs:91   (nd_src)
 drill_blast  catalog_err   → 40 resolved call sites, 60 transitive callers in 24 files

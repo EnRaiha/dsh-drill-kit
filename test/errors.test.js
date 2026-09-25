@@ -19,7 +19,7 @@ stack backtrace:
    3: nodedb_sql::executor::apply::apply_put
              at ./nodedb-sql/src/executor/apply.rs:88:9
    4: tokio::runtime::task::raw::poll
-             at /home/maya/.cargo/registry/src/index.crates.io/tokio-1.40.0/src/runtime/task/raw.rs:271:5`
+             at /home/user/.cargo/registry/src/index.crates.io/tokio-1.40.0/src/runtime/task/raw.rs:271:5`
 
 const RUSTC = `error[E0308]: mismatched types
   --> nodedb/src/control/catalog/types.rs:41:9
@@ -28,9 +28,9 @@ const RUSTC = `error[E0308]: mismatched types
    |            ---   ^^^^^^^^^^^^^ expected \`u64\`, found \`CatalogError\``
 
 const PYTHON = `Traceback (most recent call last):
-  File "/home/maya/scripts/maya-state-query.py", line 42, in <module>
+  File "/home/user/scripts/state-query.py", line 42, in <module>
     main()
-  File "/home/maya/scripts/maya-state-query.py", line 31, in main
+  File "/home/user/scripts/state-query.py", line 31, in main
     get_conn()`
 
 test('a modern panic yields the message and the file:line:column frame', () => {
@@ -68,8 +68,8 @@ test('compiler diagnostics and tracebacks are parsed', () => {
 
   const python = parseFrames(PYTHON)
   assert.deepEqual(python.frames.map(f => `${f.file}:${f.line}`), [
-    '/home/maya/scripts/maya-state-query.py:42',
-    '/home/maya/scripts/maya-state-query.py:31',
+    '/home/user/scripts/state-query.py:42',
+    '/home/user/scripts/state-query.py:31',
   ], 'a traceback keeps both frames, and an absolute path outside a repository stays absolute')
 })
 
@@ -88,9 +88,9 @@ test('a pathological backtrace is capped and stays ordered', () => {
 
 test('path normalization strips noise and keeps external marking', () => {
   assert.deepEqual(normalizeFramePath('./src/a.rs'), { file: 'src/a.rs', external: false })
-  assert.deepEqual(normalizeFramePath('file:///home/maya/projects/nodedb/src/a.rs'), { file: 'nodedb/src/a.rs', external: false })
+  assert.deepEqual(normalizeFramePath('file:///home/user/projects/nodedb/src/a.rs'), { file: 'nodedb/src/a.rs', external: false })
   assert.equal(normalizeFramePath('/rustc/abc/library/core/src/panicking.rs').external, true)
-  assert.equal(normalizeFramePath('/home/maya/.cargo/registry/src/x/tokio/src/a.rs').external, true)
+  assert.equal(normalizeFramePath('/home/user/.cargo/registry/src/x/tokio/src/a.rs').external, true)
 })
 
 test('text without frames yields an empty result rather than a wrong one', () => {
@@ -111,7 +111,7 @@ test('toolchain and dependency paths are external even when printed relative', (
   assert.equal(normalizeFramePath('.cargo/registry/src/index.crates.io-6f17d22bba15001f/rand-0.8.5/src/rngs/thread.rs').external, true)
   // The absolute forms keep working.
   assert.equal(normalizeFramePath('/rustc/abc123/library/std/src/panicking.rs').external, true)
-  assert.equal(normalizeFramePath('/home/maya/.cargo/registry/src/x/rand-0.8.5/src/lib.rs').external, true)
+  assert.equal(normalizeFramePath('/home/user/.cargo/registry/src/x/rand-0.8.5/src/lib.rs').external, true)
   assert.equal(normalizeFramePath('/usr/lib/python3.12/site-packages/x.py').external, true)
   // And a repository that happens to contain such a directory still owns its file:
   // the prefixes only match at the start of the path.

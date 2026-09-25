@@ -1,12 +1,15 @@
 import type { Plugin, PluginInput } from "@kilocode/plugin"
 import { tool } from "@kilocode/plugin/tool"
 import { spawnSync } from "node:child_process"
-import { appendFileSync } from "node:fs"
+import { appendFileSync, existsSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 /**
  * pr-craft — PR & code-review craft for Kilo.
  *
- * Logic lives once, in Python: /home/maya/scripts/pr_craft.py (stdlib only, shared with
+ * Logic lives once, in Python: core/pr_craft.py (stdlib only, shared with
  * the Hermes plugin ~/.hermes/plugins/pr-craft). Payload goes over stdin as JSON so no
  * shell escaping is involved.
  *
@@ -15,8 +18,9 @@ import { appendFileSync } from "node:fs"
  *               injects the distilled checklist (max 2x per session).
  */
 
-const CORE = process.env.PR_CRAFT_CORE ?? "/home/maya/scripts/pr_craft.py"
-const LOG = "/home/maya/logs/pr-craft.log"
+const REPO_CORE = fileURLToPath(new URL("../../core/pr_craft.py", import.meta.url))
+const CORE = process.env.PR_CRAFT_CORE ?? (existsSync(REPO_CORE) ? REPO_CORE : join(homedir(), "scripts", "pr_craft.py"))
+const LOG = process.env.PR_CRAFT_LOG ?? join(homedir(), "logs", "pr-craft.log")
 const MAX_INJECT = 2
 const TTL = 6 * 3600_000
 
@@ -76,7 +80,7 @@ function bullets(rows: { level: string; rule: string; msg: string }[] | undefine
 // ---------------------------------------------------------------- renderers
 
 function renderChecklist(d: Json | null): string {
-  if (!d) return "❌ pr-craft core unreachable (python3 /home/maya/scripts/pr_craft.py)."
+  if (!d) return `❌ pr-craft core unreachable (python3 ${CORE}).`
   const sections = (d.sections || {}) as Record<string, string[]>
   const order = ["flow", "author", "reviewer"]
   let out = `# PR/code-review checklist (role=${String(d.role)}, ${String(d.count)} items)\n`

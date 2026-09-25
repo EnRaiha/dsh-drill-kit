@@ -36,12 +36,18 @@ const declaredTests = p => readFileSync(join(repo, p), 'utf8').split('\n').filte
 
 const commit = git('rev-parse', 'HEAD')
 const branch = git('branch', '--show-current')
-const dirty = git('status', '--porcelain')
+// The bundle is a generated artifact that lives in the repo, so it always shows up
+// as dirty while being regenerated. Ignore its own path when judging the tree, or
+// every bundle would claim it was built from a dirty checkout.
+const bundlePath = `docs/DRILL-PLUGIN-SOURCE-BUNDLE-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}.md`
+const dirty = git('status', '--porcelain').split('\n').filter(l => l.trim() !== '' && !l.endsWith(bundlePath)).join('\n')
 const version = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')).version
 
 const suite = (() => {
   const out = execFileSync('node', ['--test', ...tests.map(p => join(repo, p))], { encoding: 'utf8' })
-  return out.split('\n').filter(l => /^# (tests|pass|fail|duration_ms)/.test(l) || l.startsWith('not ok')).join('\n')
+  // duration_ms is omitted on purpose: it changes every run, and a generated artifact
+  // that differs on every regeneration cannot be verified by diff.
+  return out.split('\n').filter(l => /^# (tests|pass|fail)/.test(l) || l.startsWith('not ok')).join('\n')
 })()
 
 const totalTests = tests.reduce((sum, p) => sum + declaredTests(p), 0)

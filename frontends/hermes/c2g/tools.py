@@ -1,7 +1,7 @@
 """Handlers for the c2g Hermes plugin.
 
 All logic lives in one stdlib-only core shared with the Kilo plugin:
-/home/maya/scripts/c2g_tools.py. Handlers return JSON strings (Hermes convention),
+core/c2g_tools.py in this repository. Handlers return JSON strings (Hermes convention),
 each carrying a rendered `markdown` field so the answer is readable as-is.
 """
 
@@ -15,8 +15,11 @@ import sys
 import time
 from pathlib import Path
 
-CORE = Path(os.environ.get("C2G_CORE", "/home/maya/scripts/c2g_tools.py"))
-LOG = Path("/home/maya/logs/c2g.log")
+# Core resolution: an explicit override, else this kit's copy, else the usual
+# home-directory install (frontends/hermes/c2g/tools.py -> repo root is parents[3]).
+REPO_CORE = Path(__file__).resolve().parents[3] / "core" / "c2g_tools.py"
+CORE = Path(os.environ.get("C2G_CORE") or (REPO_CORE if REPO_CORE.exists() else Path.home() / "scripts" / "c2g_tools.py"))
+LOG = Path(os.environ.get("C2G_LOG") or Path.home() / "logs" / "c2g.log")
 MAX_RENDER = 8_000
 QUERY_TIMEOUT_S = 200
 INDEX_TIMEOUT_S = 900
@@ -105,7 +108,7 @@ def _body(d: dict) -> str:
 
 def _render(d: dict | None) -> str:
     if not d:
-        return "❌ c2g core unreachable (python3 /home/maya/scripts/c2g_tools.py)."
+        return f"❌ c2g core unreachable (python3 {CORE})."
     if d.get("tool") == "blast_radius" and d.get("parts"):
         out = f"# c2g_blast_radius — `{d.get('name')}`\n"
         for name, sub in (d["parts"] or {}).items():

@@ -1,7 +1,7 @@
 """Handlers for the pr-craft Hermes plugin.
 
 All logic lives in one stdlib-only core shared with the Kilo plugin:
-/home/maya/scripts/pr_craft.py. Handlers return JSON strings (Hermes convention),
+core/pr_craft.py in this repository. Handlers return JSON strings (Hermes convention),
 each carrying a rendered `markdown` field so the answer is readable as-is.
 """
 
@@ -16,8 +16,9 @@ import sys
 import time
 from pathlib import Path
 
-CORE = Path(os.environ.get("PR_CRAFT_CORE", "/home/maya/scripts/pr_craft.py"))
-LOG = Path("/home/maya/logs/pr-craft.log")
+REPO_CORE = Path(__file__).resolve().parents[3] / "core" / "pr_craft.py"
+CORE = Path(os.environ.get("PR_CRAFT_CORE") or (REPO_CORE if REPO_CORE.exists() else Path.home() / "scripts" / "pr_craft.py"))
+LOG = Path(os.environ.get("PR_CRAFT_LOG") or Path.home() / "logs" / "pr-craft.log")
 MAX_INJECT = 2
 
 _state: dict[str, object] = {"core": None}

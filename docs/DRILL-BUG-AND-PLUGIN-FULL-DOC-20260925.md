@@ -8,7 +8,7 @@
 
 *Self-contained: this document is the specification, the operating guide, the risk register and the review record in one file. It consolidates `~/projects/DRILL-BUG-FULL-DOC-20260925.md` and `~/projects/DRILL-E2E-REVIEW-20260925.md`, which stay on disk as the earlier revisions.*
 
-**Glossary** — **DSH** = DeepSeek Harness, the agent runtime this plugin loads into (the checkout is `~/projects/deepseek-harness`). **c2g** = code2graph, the Rust code-graph extractor written by **farhan-syah** (`NodeDB-Lab/code2graph`); locally the name also covers its per-project cache and this machine's merged store + embeddings — see **§4.0** before assuming which one a sentence means. **tgrep** = a trigram-indexed grep with a ripgrep-compatible `--json` stream. **Ledger** = the append-only per-task evidence file. **Gate** = a predicate over that ledger. **Arm** = which side of the fix a test ran on (`base` before, `fix` after). **Commit binding** = an evidence record names the `HEAD` it belongs to.
+**Glossary** — **DSH** = DeepSeek Harness, the agent runtime this plugin loads into (the checkout is `~/projects/deepseek-harness`). **c2g** = code2graph, the Rust code-graph extractor written by **[farhan-syah](https://github.com/farhan-syah)** ([`NodeDB-Lab/code2graph`](https://github.com/NodeDB-Lab/code2graph)); locally the name also covers its per-project cache and this machine's merged store + embeddings — see **§4.0** before assuming which one a sentence means. **tgrep** = a trigram-indexed grep with a ripgrep-compatible `--json` stream. **Ledger** = the append-only per-task evidence file. **Gate** = a predicate over that ledger. **Arm** = which side of the fix a test ran on (`base` before, `fix` after). **Commit binding** = an evidence record names the `HEAD` it belongs to.
 
 A **drill** is a bug fix run as a pipeline with gates: localize from the failure signal, map the blast radius, enumerate the edge cases, prove **red** (fails on base) then **green** (passes with the fix), pass hygiene, pass a fresh-context read-only **Review 2**, then produce the PR — with every claim backed by an artifact in a ledger. "Done" is not a sentence; it is a gate evaluation.
 
@@ -136,14 +136,14 @@ The same three letters name an upstream library, a cache, a merged store, and an
 
 | Name | What it is | Who owns / produces it | Where it lives | Role in the drill |
 |---|---|---|---|---|
-| **code2graph (upstream)** | Rust library + `c2g` CLI: source files → **symbols, references, cross-file edges** (calls, imports, FFI), tree-sitter based, SCIP-aligned, and deliberately **storage-neutral** ("zero storage opinion") | **`NodeDB-Lab/code2graph`** — written by **farhan-syah** (391 contributions; sole visible author, first commit 2026-06-13). The local clone also carries **EnRaiha's** CLI fixes (`f9580d2 fix(cli): refuse an implicit home root and cap reported omissions`) | `~/projects/code2graph` → binary `~/projects/code2graph/target/release/c2g` | the extractor that *produces* the graph; the drill calls it only as the **last resort** (it hung >60 s on `nodedb` during this work) |
+| **code2graph (upstream)** | Rust library + `c2g` CLI: source files → **symbols, references, cross-file edges** (calls, imports, FFI), tree-sitter based, SCIP-aligned, and deliberately **storage-neutral** ("zero storage opinion") | **[`NodeDB-Lab/code2graph`](https://github.com/NodeDB-Lab/code2graph)** — written by **[farhan-syah](https://github.com/farhan-syah)**, the NodeDB founder (391 contributions; sole visible author, first commit 2026-06-13). The local clone also carries **EnRaiha's** CLI fixes (`f9580d2 fix(cli): refuse an implicit home root and cap reported omissions`) | `~/projects/code2graph` → binary `~/projects/code2graph/target/release/c2g` | the extractor that *produces* the graph; the drill calls it only as the **last resort** (it hung >60 s on `nodedb` during this work) |
 | **per-project CLI cache** | the SQLite cache the CLI writes per project: `graph_symbols`, `graph_edges`, `active_snapshots`, scope tier | produced locally by the code2graph CLI | `~/.cache/code2graph/projects/<project-key>/cache.sqlite3` | **layer 1** — what `drill_locate` / `drill_blast` query first (~2 ms, read-only SQL) |
 | **merged store + embeddings** | merged `nodes(id,name,kind,file,repo,line)` + `links(source,target,relation)` + FTS + FAISS/vectors for semantic search | **this machine's pipeline**, not the upstream repo: `~/scripts/merge_c2g_shards.py`, `build_c2g_local.py`, `dump_c2g_embed.py`; layout and policy in `~/Embed/RULES.md` | `~/Embed/c2g/{graph_index.sqlite, fts.sqlite, index.faiss, vectors.npy, meta.parquet}` | **layer 2** — answers for worktrees the cache does not cover; shard paths (`nd_src` → `nodedb/src`) mapped into the worktree |
 | **agent wrapper (the "c2g skill")** | stdlib-only bridge exposing the CLI to agents: `frame` / `error` + the eight query tools | this machine | `~/scripts/c2g_tools.py` v1.1.0 → `~/.kilo/plugins/c2g/server.ts`, `~/.hermes/plugins/c2g/` | the shared surface every runtime calls; `c2g_error` lives here |
 
 Why the extra layers exist: the upstream library defines **no storage**, so every consumer supplies its own — the CLI cache is the fast per-worktree index, and `~/Embed/c2g` is the merged, cross-worktree store. When this document says "c2g answered", the record always names which one: `c2g` (cache), `c2g-embed` (merged store), or `c2g <binary>` (last resort).
 
-**Are "our c2g" and "NodeDB" the same thing?** Not the same *artifact*, but one project family. Verified from the local clones: `NodeDB-Lab/code2graph` and `NodeDB-Lab/nodedb` are both published under the NodeDB-Lab org (the `nodedb` clone carries `origin` **and** `upstream` = `NodeDB-Lab/nodedb`), and one author — Farhan Syah — wrote **390 of 391** code2graph commits and **3,740 of 3,793** nodedb commits (3,673 under `bizimpulse@gmail.com`, 67 under his GitHub noreply identity). So the c2g extractor is the NodeDB project's own graph engine, not a third-party tool this machine happens to use. What is **ours alone** is the storage and agent layers on top: the per-project CLI cache, the merged `~/Embed/c2g` store, `~/scripts/c2g_tools.py`, and the Kilo/Hermes frontends. Org *membership* cannot be read from a git clone, so this document records the shared authorship and the shared org rather than a title.
+**Are "our c2g" and "NodeDB" the same thing?** Not the same *artifact*, but one project family. Verified from the local clones: `NodeDB-Lab/code2graph` and `NodeDB-Lab/nodedb` are both published under the NodeDB-Lab org (the `nodedb` clone carries `origin` **and** `upstream` = `NodeDB-Lab/nodedb`), and one author — [Farhan Syah](https://github.com/farhan-syah) — wrote **390 of 391** code2graph commits and **3,740 of 3,793** nodedb commits (3,673 under his primary author identity, 67 under his GitHub identity). His profile is the citation; no private address is reproduced here. So the c2g extractor is the NodeDB project's own graph engine, not a third-party tool this machine happens to use. What is **ours alone** is the storage and agent layers on top: the per-project CLI cache, the merged `~/Embed/c2g` store, `~/scripts/c2g_tools.py`, and the Kilo/Hermes frontends. Org *membership* cannot be read from a git clone, so this document records the shared authorship and the shared org rather than a title.
 
 Stage 1–2 answers come from three layers, in order, and every record names which one answered:
 
@@ -245,7 +245,7 @@ Plus one `agent/turn-stopping` reminder: while an active task has open required 
 
 | Piece | Path | Role in the drill |
 |---|---|---|
-| c2g core | `~/scripts/c2g_tools.py` v1.1.0 | `frame` / `error` + the eight existing query tools; cache → merged store → binary. Built on farhan-syah's `NodeDB-Lab/code2graph` CLI (see §4.0) |
+| c2g core | `~/scripts/c2g_tools.py` v1.1.0 | `frame` / `error` + the eight existing query tools; cache → merged store → binary. Built on [farhan-syah](https://github.com/farhan-syah)'s [`NodeDB-Lab/code2graph`](https://github.com/NodeDB-Lab/code2graph) CLI (see §4.0) |
 | Kilo frontend | `~/.kilo/plugins/c2g/server.ts` | `c2g_error`, `c2g_def`, `c2g_blast_radius`, `c2g_diff_impact`, … |
 | Hermes frontend | `~/.hermes/plugins/c2g/{tools,schemas,__init__}.py` + `plugin.yaml` | same tools, one core |
 | PR core | `~/scripts/pr_craft.py` | `lint-desc`, `lint-comment`, `lint-diff`, `plan`, `checklist`; 10-case selftest |
@@ -270,7 +270,7 @@ Plus one `agent/turn-stopping` reminder: while an active task has open required 
 
 ```bash
 # 0. one-time
-dsh plugin --profile <profile> add /home/maya/projects/dsh-drill
+dsh plugin --profile <profile> add ~/projects/dsh-drill
 drill_setup                                  # installs the skill + auditor role
 drill_index                                  # tgrep index for this repo (out-of-tree)
 ```
@@ -334,7 +334,7 @@ frames: 4 (2 resolved, 2 external)
   nodedb/src/control/sequence/registry.rs:231:13 → nextval_batch [Method] (c2g-embed)
   /rustc/9d1c70f/library/std/src/panicking.rs:597:5 (external)
   nodedb/src/control/sequence/types.rs:95:9 → nextval_batch [Method] (c2g-embed)
-  /home/maya/.cargo/registry/…/tokio/src/runtime/task/raw.rs:271:5 (external)
+  ~/.cargo/registry/…/tokio/src/runtime/task/raw.rs:271:5 (external)
 gate: pass:localize
 ```
 
@@ -495,7 +495,7 @@ Two design questions were *decided*, not verified, and are flagged as such in th
 | Risk | Evidence | Mitigation |
 |---|---|---|
 | The c2g binary can hang for minutes | `c2g status` / `c2g def --at-file` exceeded 60 s on `nodedb`, `nodedb-305` | cache-first resolution; binary last |
-| A stale/garbage c2g cache claims coverage | a cache rooted at `/home/maya` with no snapshot matched every repo | require an active scope snapshot; prefer the most specific root |
+| A stale/garbage c2g cache claims coverage | a cache rooted at the home directory, with no snapshot, matched every repo | require an active scope snapshot; prefer the most specific root |
 | The merged store is a snapshot, not HEAD | `~/Embed/c2g` built 2026-09-24 | the record carries the build time; precedence keeps the live cache first |
 | Text search can be mistaken for a call graph | tgrep/rg answer with occurrences | records are labelled `text-level`; transitive impact is never produced by text |
 | A CI/gate that never runs looks like a pass | `dsh-plugin-doctor` exit 6 names exactly this | `drill_gate` must be called; `pre-push` refuses without a ready ledger |
@@ -542,7 +542,7 @@ Two design questions were *decided*, not verified, and are flagged as such in th
 cd ~/projects/dsh-drill && npm test           # 103 tests: core, c2g SQL, cache, embed, search, git/role, errors, pr, integration
 node --test test/integration.test.js          # the end-to-end drill through the real DSH tool runtime
 python3 ~/scripts/pr_craft.py selftest        # 10-case PR-lint regression
-python3 ~/scripts/c2g_tools.py run --stdin <<< '{"tool":"error","text":"panicked at nodedb/src/control/sequence/registry.rs:231:13:\nboom","root":"/home/maya/projects/nodedb-296"}'
+python3 ~/scripts/c2g_tools.py run --stdin <<< '{"tool":"error","text":"panicked at nodedb/src/control/sequence/registry.rs:231:13:\nboom","root":"$PWD"}'
 dsh --profile drill --dump-config             # profile wiring (see the note below before using `plugin list`)
 cd ~/projects/deepseek-harness && node apps/cli/lib/bin.js drill --port 3999 --no-open   # scratch boot (never the live profile)
 ```
@@ -562,7 +562,7 @@ cd ~/projects/deepseek-harness && node apps/cli/lib/bin.js drill --port 3999 --n
 | `~/.hermes/skills/devops/nodedb-parity-audit/SKILL.md` | Review 2 checklist |
 | `~/.cache/dsh-drill/` | discovery cache + tgrep indexes (7 worktrees indexed) |
 | `~/Embed/c2g/graph_index.sqlite` | merged c2g store (nodes/links) — this machine's layer, not upstream |
-| `NodeDB-Lab/code2graph` | the upstream c2g library + CLI, by farhan-syah; local clone at `~/projects/code2graph` |
+| [`NodeDB-Lab/code2graph`](https://github.com/NodeDB-Lab/code2graph) | the upstream c2g library + CLI, by [farhan-syah](https://github.com/farhan-syah); local clone at `~/projects/code2graph` |
 | `~/projects/kilo-plugins-drill-review-20260925.md` | the review this work came out of |
 | `~/projects/DRILL-E2E-REVIEW-20260925.md` | the 2026-09-25 review as a standalone record (its content is folded in as §7 here) |
 | `~/projects/DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md` | **this document** — specification, operating guide, review record and risk register in one file |

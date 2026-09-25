@@ -85,9 +85,9 @@ test('searchText reports an unavailable engine instead of throwing', () => {
 const hasTgrep = resolveBin('tgrep') !== null
 
 test('index paths are stable and root-specific', () => {
-  const a = indexSlug('/home/maya/projects/nodedb-296')
-  assert.equal(a, 'home-maya-projects-nodedb-296')
-  assert.equal(indexDirFor('/home/maya/projects/nodedb-296', '/cache'), join('/cache', a))
+  const a = indexSlug('/home/user/projects/nodedb-296')
+  assert.equal(a, 'home-user-projects-nodedb-296')
+  assert.equal(indexDirFor('/home/user/projects/nodedb-296', '/cache'), join('/cache', a))
   assert.notEqual(indexSlug('/a/b'), indexSlug('/a/c'))
 })
 

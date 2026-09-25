@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.2**, commit `3ede5d43dc6e` on branch `master`, tree DIRTY. Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.2**, commit `13726c08c754` on branch `master`, tree DIRTY. Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -10,27 +10,27 @@
 |---|---|---|---|---|
 | `.gitignore` | 4 | 28 | `1adbb37be33001da` | — |
 | `LICENSE` | 22 | 1064 | `2f841f07845b05a9` | — |
-| `README.md` | 330 | 31917 | `d2e0eb28da4ebced` | — |
+| `README.md` | 330 | 31911 | `419d9db73dde2e0c` | — |
 | `cordis.patch.yml` | 9 | 300 | `7b935022f8a8569a` | — |
 | `core/README.md` | 39 | 2842 | `63a0a42187d0161a` | — |
-| `core/c2g_tools.py` | 674 | 26428 | `bb8cc74dfb05f6f2` | — |
+| `core/c2g_tools.py` | 674 | 26464 | `bc13afe99510c89e` | — |
 | `core/pr_craft.py` | 488 | 26669 | `eb02e28af4b86fc5` | — |
 | `docs/README.md` | 28 | 2891 | `3c914239cc11ebe6` | — |
 | `frontends/README.md` | 46 | 2336 | `3c88c71470530bd6` | — |
-| `frontends/hermes/c2g/SKILL.md` | 89 | 5515 | `d9824a1e7ff95f14` | — |
-| `frontends/hermes/c2g/__init__.py` | 31 | 1583 | `644878432b4d40f4` | — |
+| `frontends/hermes/c2g/SKILL.md` | 89 | 5510 | `ea3640f117e6a831` | — |
+| `frontends/hermes/c2g/__init__.py` | 31 | 1592 | `4fe73484f698bcf9` | — |
 | `frontends/hermes/c2g/plugin.yaml` | 19 | 606 | `065e2ac6fab5cf2a` | — |
 | `frontends/hermes/c2g/schemas.py` | 149 | 4697 | `75329da0f32aa83c` | — |
-| `frontends/hermes/c2g/tools.py` | 221 | 7469 | `2458665f4fcaa8c4` | — |
-| `frontends/hermes/pr-craft/__init__.py` | 32 | 1554 | `ca762f9cf83c466a` | — |
+| `frontends/hermes/c2g/tools.py` | 224 | 7771 | `9dc77ddb621edc1a` | — |
+| `frontends/hermes/pr-craft/__init__.py` | 32 | 1540 | `73d4ae01ec17c89d` | — |
 | `frontends/hermes/pr-craft/plugin.yaml` | 15 | 436 | `5d2fc24e022bc9b3` | — |
 | `frontends/hermes/pr-craft/schemas.py` | 94 | 3204 | `14eab8eb275477bd` | — |
-| `frontends/hermes/pr-craft/tools.py` | 254 | 9729 | `6aa6016d08f84655` | — |
-| `frontends/kilo/c2g/SKILL.md` | 78 | 4444 | `cfab638870eacd50` | — |
-| `frontends/kilo/c2g/server.ts` | 227 | 9288 | `7b94ed3c0c3126a9` | — |
+| `frontends/hermes/pr-craft/tools.py` | 255 | 9896 | `a50a857e3e102460` | — |
+| `frontends/kilo/c2g/SKILL.md` | 78 | 4439 | `045a42f0fe54e2b7` | — |
+| `frontends/kilo/c2g/server.ts` | 234 | 9769 | `21cd0390bce4fd2f` | — |
 | `frontends/kilo/pr-craft/SKILL.md` | 88 | 4226 | `52a78c21b4475ca2` | — |
-| `frontends/kilo/pr-craft/server.ts` | 263 | 11261 | `158e76e3499b0877` | — |
-| `index.js` | 1598 | 80493 | `20afd58a8b09831e` | — |
+| `frontends/kilo/pr-craft/server.ts` | 267 | 11512 | `f430a13745164029` | — |
+| `index.js` | 1598 | 80475 | `466a829fdc44a48c` | — |
 | `lib/c2g.js` | 350 | 16752 | `e3e32966ff0fc0f2` | — |
 | `lib/cache.js` | 158 | 4455 | `20d40379c8ebd093` | — |
 | `lib/embed.js` | 291 | 12389 | `e668f9982e542349` | — |
@@ -44,20 +44,20 @@
 | `lib/runner.js` | 91 | 3367 | `c4c1b3d80baba0e8` | — |
 | `lib/search.js` | 303 | 12658 | `e973f0abbc09846d` | — |
 | `package.json` | 55 | 1556 | `e483aa6b560b4599` | — |
-| `roles/drill-auditor.md` | 55 | 3037 | `2c1346aca841a4ef` | — |
+| `roles/drill-auditor.md` | 55 | 3019 | `107e089732dc1579` | — |
 | `skills/drill/SKILL.md` | 68 | 5524 | `5b4c9a06a6dc254b` | — |
-| `tools/build-source-bundle.mjs` | 90 | 4486 | `73197c1421460460` | — |
+| `tools/build-source-bundle.mjs` | 96 | 5056 | `b81b3854dff97fa0` | — |
 | `test/c2g.test.js` | 162 | 9940 | `eda73b53ef16bf61` | 13 |
 | `test/cache.test.js` | 218 | 11674 | `4fbd474745ef55fe` | 9 |
 | `test/core.test.js` | 266 | 14119 | `d71387054522f89d` | 16 |
 | `test/embed.test.js` | 112 | 5884 | `f348358148cebd43` | 6 |
-| `test/errors.test.js` | 135 | 7556 | `2dcc29e746247670` | 10 |
+| `test/errors.test.js` | 135 | 7536 | `96e8696dd4f94a23` | 10 |
 | `test/git-role.test.js` | 136 | 6242 | `36f78867e90a4799` | 9 |
-| `test/integration.test.js` | 882 | 49642 | `202a5060aec0eb1d` | 23 |
+| `test/integration.test.js` | 882 | 49642 | `be244980d46c33a2` | 23 |
 | `test/pr.test.js` | 86 | 4971 | `c0155d628f1b8e4d` | 6 |
-| `test/search.test.js` | 135 | 6629 | `9836787de1673474` | 11 |
+| `test/search.test.js` | 135 | 6629 | `bf1a0d746a4b8c32` | 11 |
 
-**Totals:** 9387 lines across 48 files; 103 tests declared across 9 test files.
+**Totals:** 9408 lines across 48 files; 103 tests declared across 9 test files.
 
 ## The test run, recorded
 
@@ -66,7 +66,6 @@ $ node --test test/*.test.js
 # tests 103
 # pass 103
 # fail 0
-# duration_ms 2369.051835
 $ exit 0
 ```
 
@@ -114,7 +113,7 @@ SOFTWARE.
 
 ## `README.md`
 
-sha256 `d2e0eb28da4ebcededc41832eb0637c84928a8f7eb7aa8713c00ef3181962d6f` · 330 lines
+sha256 `419d9db73dde2e0c14e69d047c5fb23a6cf2912dc3a65de1a04a920e05ae2778` · 330 lines
 
 ````markdown
 # The drill kit
@@ -240,7 +239,7 @@ The plugin also registers one `agent/turn-stopping` listener: while an active ta
 
 ```sh
 # from this checkout (dev): link into a profile, then boot
-dsh plugin --profile <profile> add /home/maya/projects/dsh-drill
+dsh plugin --profile <profile> add ~/projects/dsh-drill
 node apps/cli/lib/cli.js <profile> --dump-config | grep -A2 'id: drill'
 ```
 
@@ -250,7 +249,7 @@ The plugin row ships in `cordis.patch.yml` as one entry (`id: drill`, `name: dsh
 
 ```sh
 mkdir -p node_modules/@deepseek-ai
-H=/home/maya/projects/deepseek-harness
+H=${DSH_CHECKOUT:-$HOME/projects/deepseek-harness}
 ln -sfn $H/packages/core/tools       node_modules/@deepseek-ai/dsh-tools
 ln -sfn $H/packages/llm/llm          node_modules/@deepseek-ai/dsh-llm
 ln -sfn $H/packages/subagent/subagent node_modules/@deepseek-ai/dsh-subagent
@@ -348,7 +347,7 @@ Measured on `nodedb-296` (no per-worktree cache, merged store present):
 
 ```
 drill_start  → stage 1–2: no per-worktree c2g cache, merged c2g store available
-               (/home/maya/Embed/c2g/graph_index.sqlite (built 2026-09-24T05:24:54+0800)); tgrep index ready
+               (~/Embed/c2g/graph_index.sqlite (built 2026-09-24T05:24:54+0800)); tgrep index ready
 drill_locate nextval_batch → nodedb/src/control/sequence/registry.rs:227 (nd_src)
                              nodedb/src/control/sequence/types.rs:91   (nd_src)
 drill_blast  catalog_err   → 40 resolved call sites, 60 transitive callers in 24 files
@@ -510,7 +509,7 @@ python3 core/c2g_tools.py --help
 
 ## `core/c2g_tools.py`
 
-sha256 `bb8cc74dfb05f6f2ee97601f63f06bcf6167c31d630ba1362dc519ca26b01f28` · 674 lines
+sha256 `bc13afe99510c89e472dd24af9a7ba3bcbc677a1059c27236e5beb7cdde8694e` · 674 lines
 
 ````markdown
 #!/usr/bin/env python3
@@ -548,7 +547,7 @@ import time
 from pathlib import Path
 
 VERSION = "1.1.0"
-LOG = Path("/home/maya/logs/c2g.log")
+LOG = Path(os.environ.get("C2G_LOG") or Path.home() / "logs" / "c2g.log")
 MAX_CAPTURE = 200_000
 MAX_OUT = 40_000
 DEFAULT_TIMEOUT = 180
@@ -1770,7 +1769,7 @@ On the machine this kit came from, the Kilo and opencode servers are deliberatel
 
 ## `frontends/hermes/c2g/SKILL.md`
 
-sha256 `d9824a1e7ff95f14a80c1628c30b8131f8a99e5fedd41d90029fd5d933114ce4` · 89 lines
+sha256 `ea3640f117e6a831a5cb5288e286a71f6c54889a49531fceba0abd8b6b89bdda` · 89 lines
 
 ````markdown
 ---
@@ -1841,7 +1840,7 @@ finds attribute patterns. Use `tgrep`/`rg` for text, `sg` for shape, `c2g` for r
 ```bash
 # core CLI (no plugin needed)
 python3 ~/scripts/c2g_tools.py describe
-printf '{"tool":"blast_radius","name":"coerce_value","root":"/home/maya/projects/nodedb"}' \
+printf '{"tool":"blast_radius","name":"coerce_value","root":"$HOME/projects/nodedb"}' \
   | python3 ~/scripts/c2g_tools.py run --stdin
 ```
 
@@ -1865,13 +1864,13 @@ Agent calls: `c2g_def(name="extract_vector_floats", root="…")`,
 
 ## `frontends/hermes/c2g/__init__.py`
 
-sha256 `644878432b4d40f44618c15d39e2bfc23205e09e9c758215694ed64a9aafc3eb` · 31 lines
+sha256 `4fe73484f698bcf9b895c9411726642f07bc66fc8e50fb743fc3853487066714` · 31 lines
 
 ````markdown
 """c2g — straight code2graph access for Hermes (dbless).
 
 Registers 8 tools. All logic lives in the shared stdlib-only core
-/home/maya/scripts/c2g_tools.py (same core the Kilo plugin bridges into), so the
+core/c2g_tools.py in this repository (the same core the Kilo plugin bridges into), so the
 two frontends stay in sync. No NodeDB, no PG, no cortex.
 """
 
@@ -2082,13 +2081,13 @@ C2G_ERROR = {
 
 ## `frontends/hermes/c2g/tools.py`
 
-sha256 `2458665f4fcaa8c48e99dc71007ea921bed06b7fd383927f411d1a1a71506d52` · 221 lines
+sha256 `9dc77ddb621edc1ad21ca3ce32b38a05bd828a8f9cf41c1b01d6892e24b213f1` · 224 lines
 
 ````markdown
 """Handlers for the c2g Hermes plugin.
 
 All logic lives in one stdlib-only core shared with the Kilo plugin:
-/home/maya/scripts/c2g_tools.py. Handlers return JSON strings (Hermes convention),
+core/c2g_tools.py in this repository. Handlers return JSON strings (Hermes convention),
 each carrying a rendered `markdown` field so the answer is readable as-is.
 """
 
@@ -2102,8 +2101,11 @@ import sys
 import time
 from pathlib import Path
 
-CORE = Path(os.environ.get("C2G_CORE", "/home/maya/scripts/c2g_tools.py"))
-LOG = Path("/home/maya/logs/c2g.log")
+# Core resolution: an explicit override, else this kit's copy, else the usual
+# home-directory install (frontends/hermes/c2g/tools.py -> repo root is parents[3]).
+REPO_CORE = Path(__file__).resolve().parents[3] / "core" / "c2g_tools.py"
+CORE = Path(os.environ.get("C2G_CORE") or (REPO_CORE if REPO_CORE.exists() else Path.home() / "scripts" / "c2g_tools.py"))
+LOG = Path(os.environ.get("C2G_LOG") or Path.home() / "logs" / "c2g.log")
 MAX_RENDER = 8_000
 QUERY_TIMEOUT_S = 200
 INDEX_TIMEOUT_S = 900
@@ -2192,7 +2194,7 @@ def _body(d: dict) -> str:
 
 def _render(d: dict | None) -> str:
     if not d:
-        return "❌ c2g core unreachable (python3 /home/maya/scripts/c2g_tools.py)."
+        return f"❌ c2g core unreachable (python3 {CORE})."
     if d.get("tool") == "blast_radius" and d.get("parts"):
         out = f"# c2g_blast_radius — `{d.get('name')}`\n"
         for name, sub in (d["parts"] or {}).items():
@@ -2309,13 +2311,13 @@ def handle_c2g_raw(args: dict, **kwargs) -> str:
 
 ## `frontends/hermes/pr-craft/__init__.py`
 
-sha256 `ca762f9cf83c466ae395c1a7611bd68ac82b2138e7d63d8a9ec53b9b15e78804` · 32 lines
+sha256 `73d4ae01ec17c89d4910a5079610d3d305f1b408eb7dbd50393321bc0f5fbeb1` · 32 lines
 
 ````markdown
 """pr-craft — PR & code-review craft for Hermes.
 
 Registers 5 tools, the pre_llm_call context-injection hook, and a /pr command.
-All logic lives in the shared stdlib-only core /home/maya/scripts/pr_craft.py
+All logic lives in the shared stdlib-only core core/pr_craft.py
 (same core the Kilo plugin bridges into), so the two stay in sync.
 """
 
@@ -2468,13 +2470,13 @@ PR_REVIEW_PLAN = {
 
 ## `frontends/hermes/pr-craft/tools.py`
 
-sha256 `6aa6016d08f846559451cf199ae14fc153bbd3160ed4bb3e9362558e2b0fd300` · 254 lines
+sha256 `a50a857e3e1024605ea09b6dccc24ff43cbe77167088e74f938e81d27a8c81b7` · 255 lines
 
 ````markdown
 """Handlers for the pr-craft Hermes plugin.
 
 All logic lives in one stdlib-only core shared with the Kilo plugin:
-/home/maya/scripts/pr_craft.py. Handlers return JSON strings (Hermes convention),
+core/pr_craft.py in this repository. Handlers return JSON strings (Hermes convention),
 each carrying a rendered `markdown` field so the answer is readable as-is.
 """
 
@@ -2489,8 +2491,9 @@ import sys
 import time
 from pathlib import Path
 
-CORE = Path(os.environ.get("PR_CRAFT_CORE", "/home/maya/scripts/pr_craft.py"))
-LOG = Path("/home/maya/logs/pr-craft.log")
+REPO_CORE = Path(__file__).resolve().parents[3] / "core" / "pr_craft.py"
+CORE = Path(os.environ.get("PR_CRAFT_CORE") or (REPO_CORE if REPO_CORE.exists() else Path.home() / "scripts" / "pr_craft.py"))
+LOG = Path(os.environ.get("PR_CRAFT_LOG") or Path.home() / "logs" / "pr-craft.log")
 MAX_INJECT = 2
 
 _state: dict[str, object] = {"core": None}
@@ -2728,7 +2731,7 @@ def command_pr(raw: str = "") -> str:
 
 ## `frontends/kilo/c2g/SKILL.md`
 
-sha256 `cfab638870eacd5016e447120b2a774543ec15f75ee56928c08bb75cfd2892a4` · 78 lines
+sha256 `045a42f0fe54e2b700038a4f5bbcfcb4abd16452c3965d03d28f1fe1b5a4bc69` · 78 lines
 
 ````markdown
 ---
@@ -2793,7 +2796,7 @@ finds attribute patterns. Use `tgrep`/`rg` for text, `sg` for shape, `c2g` for r
 ```bash
 # core CLI (no plugin needed)
 python3 ~/scripts/c2g_tools.py describe
-printf '{"tool":"blast_radius","name":"coerce_value","root":"/home/maya/projects/nodedb"}' \
+printf '{"tool":"blast_radius","name":"coerce_value","root":"$HOME/projects/nodedb"}' \
   | python3 ~/scripts/c2g_tools.py run --stdin
 ```
 
@@ -2812,19 +2815,22 @@ Agent calls: `c2g_def(name="extract_vector_floats", root="…")`,
 
 ## `frontends/kilo/c2g/server.ts`
 
-sha256 `7b94ed3c0c3126a9b469cd058f801c3cde3a382238dd6064377439a129d5ca60` · 227 lines
+sha256 `21cd0390bce4fd2f5ee6b4095cf8b9cac365d022ce039ce26051f493086c9bca` · 234 lines
 
 ````markdown
 import type { Plugin, PluginInput } from "@kilocode/plugin"
 import { tool } from "@kilocode/plugin/tool"
 import { spawnSync } from "node:child_process"
-import { appendFileSync } from "node:fs"
+import { appendFileSync, existsSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 /**
  * c2g — straight code2graph access for Kilo, bypassing Maya cortex.
  *
  * DB-less: shells out to the c2g binary through the shared stdlib core
- * /home/maya/scripts/c2g_tools.py (same core the Hermes plugin uses). No
+ * core/c2g_tools.py in this repository — the same core the Hermes plugin uses. No
  * NodeDB, no PG. The same questions can also be asked through
  * cortex_codegraph_* (NodeDB code graph) and knowledge-graph_* (PG store)
  * when those are warm — this plugin is the direct path.
@@ -2833,8 +2839,12 @@ import { appendFileSync } from "node:fs"
  *          c2g_diff_impact, c2g_query, c2g_raw
  */
 
-const CORE = process.env.C2G_CORE ?? "/home/maya/scripts/c2g_tools.py"
-const LOG = "/home/maya/logs/c2g.log"
+// Core resolution: an explicit override, else this kit's copy, else the usual
+// home-directory install. Being repo-relative is what lets a checkout run the
+// frontend against core/ without copying anything.
+const REPO_CORE = fileURLToPath(new URL("../../core/c2g_tools.py", import.meta.url))
+const CORE = process.env.C2G_CORE ?? (existsSync(REPO_CORE) ? REPO_CORE : join(homedir(), "scripts", "c2g_tools.py"))
+const LOG = process.env.C2G_LOG ?? join(homedir(), "logs", "c2g.log")
 const MAX_RENDER = 8_000
 const QUERY_TIMEOUT_MS = 200_000
 const INDEX_TIMEOUT_MS = 900_000
@@ -2884,7 +2894,7 @@ function body(d: Json): string {
 }
 
 function render(d: Json | null): string {
-  if (!d) return "❌ c2g core unreachable (python3 /home/maya/scripts/c2g_tools.py)."
+  if (!d) return `❌ c2g core unreachable (python3 ${CORE}).`
   if (d.tool === "blast_radius" && d.parts) {
     const parts = d.parts as Record<string, Json>
     let out = `# c2g_blast_radius — \`${String(d.name)}\`\n`
@@ -3139,18 +3149,21 @@ Escalation: 3-4 replies without progress → live conversation, then post the su
 
 ## `frontends/kilo/pr-craft/server.ts`
 
-sha256 `158e76e3499b0877881522619922370985f87c2c30056e4a5d55989cd8ea265b` · 263 lines
+sha256 `f430a137451640293911f34b39fbca23838f2cef592db541ff7e6c39112c16ea` · 267 lines
 
 ````markdown
 import type { Plugin, PluginInput } from "@kilocode/plugin"
 import { tool } from "@kilocode/plugin/tool"
 import { spawnSync } from "node:child_process"
-import { appendFileSync } from "node:fs"
+import { appendFileSync, existsSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 /**
  * pr-craft — PR & code-review craft for Kilo.
  *
- * Logic lives once, in Python: /home/maya/scripts/pr_craft.py (stdlib only, shared with
+ * Logic lives once, in Python: core/pr_craft.py (stdlib only, shared with
  * the Hermes plugin ~/.hermes/plugins/pr-craft). Payload goes over stdin as JSON so no
  * shell escaping is involved.
  *
@@ -3159,8 +3172,9 @@ import { appendFileSync } from "node:fs"
  *               injects the distilled checklist (max 2x per session).
  */
 
-const CORE = process.env.PR_CRAFT_CORE ?? "/home/maya/scripts/pr_craft.py"
-const LOG = "/home/maya/logs/pr-craft.log"
+const REPO_CORE = fileURLToPath(new URL("../../core/pr_craft.py", import.meta.url))
+const CORE = process.env.PR_CRAFT_CORE ?? (existsSync(REPO_CORE) ? REPO_CORE : join(homedir(), "scripts", "pr_craft.py"))
+const LOG = process.env.PR_CRAFT_LOG ?? join(homedir(), "logs", "pr-craft.log")
 const MAX_INJECT = 2
 const TTL = 6 * 3600_000
 
@@ -3220,7 +3234,7 @@ function bullets(rows: { level: string; rule: string; msg: string }[] | undefine
 // ---------------------------------------------------------------- renderers
 
 function renderChecklist(d: Json | null): string {
-  if (!d) return "❌ pr-craft core unreachable (python3 /home/maya/scripts/pr_craft.py)."
+  if (!d) return `❌ pr-craft core unreachable (python3 ${CORE}).`
   const sections = (d.sections || {}) as Record<string, string[]>
   const order = ["flow", "author", "reviewer"]
   let out = `# PR/code-review checklist (role=${String(d.role)}, ${String(d.count)} items)\n`
@@ -3408,7 +3422,7 @@ export default PrCraftPlugin
 
 ## `index.js`
 
-sha256 `20afd58a8b09831ec55ed5e5f5a64c294397ba90b29412855dc6217f10437f8d` · 1598 lines
+sha256 `466a829fdc44a48c6f68fb1499b0a9e260560735dfdf439b312b8ef5234ed7a9` · 1598 lines
 
 ````javascript
 /**
@@ -3511,7 +3525,7 @@ const FALLBACK_PERSONA = [
   'You did not write this code, so never trust the branch narrative — count things, run read-only commands, and report evidence.',
   'Read-only: no edits, no commits, no pushes, no branch changes.',
   'Every verdict needs the command and its output; anything you cannot verify goes in `unverified` with the reason.',
-  'Follow /home/maya/.hermes/skills/devops/nodedb-parity-audit/SKILL.md when it exists; otherwise apply the same seven checks: test inventory parity, caller closure, producer/consumer enumeration, invariant chokepoints, module contracts, repo norms (bash /home/maya/scripts/nodedb-preflight.sh <repo> <base>), PR format.',
+  'Follow ~/.hermes/skills/devops/nodedb-parity-audit/SKILL.md when it exists; otherwise apply the same seven checks: test inventory parity, caller closure, producer/consumer enumeration, invariant chokepoints, module contracts, repo norms (bash ~/scripts/nodedb-preflight.sh <repo> <base>), PR format.',
   'Any blocker means verdict FAIL. Do not soften a FAIL into a warning, and do not report style nits as blockers.',
 ].join(' ')
 
@@ -7334,7 +7348,7 @@ sha256 `e483aa6b560b459955160e136dfadc289dc233cb87c9c75aa5aefb238dd1e942` · 55 
 
 ## `roles/drill-auditor.md`
 
-sha256 `2c1346aca841a4ef8f24b280bbfe0299aa41c4db4b82a1ea158ed31aa92aa31d` · 55 lines
+sha256 `107e089732dc15796a068e014f009b9654c05cf5606907e42eb3e2734b1c16c2` · 55 lines
 
 ````markdown
 ---
@@ -7365,14 +7379,14 @@ You are **Review 2**: a fresh-session, read-only structural auditor for one Node
 
 ## Checklist
 
-Follow `/home/maya/.hermes/skills/devops/nodedb-parity-audit/SKILL.md` exactly:
+Follow `~/.hermes/skills/devops/nodedb-parity-audit/SKILL.md` exactly:
 
 1. **Test inventory parity** — no `mod` removed from `nodedb/tests/wire/cases/mod.rs`, no test file deleted or renamed away.
 2. **Caller closure** — for every moved or changed function, enumerate its callers and confirm each still resolves.
 3. **Producer/consumer enumeration** — for every changed type, list producers and consumers; a changed invariant must reach all of them.
 4. **Invariant chokepoints** — must-fail combinations actually fail; run them, do not reason about them.
 5. **Module contracts** — `balanced_gate`, cursors, `mod.rs` registration, the 500-line cap.
-6. **Repo norms** — `bash /home/maya/scripts/nodedb-preflight.sh <repo> <base>` must exit 0; report its VIOLATION lines verbatim.
+6. **Repo norms** — `bash ~/scripts/nodedb-preflight.sh <repo> <base>` must exit 0; report its VIOLATION lines verbatim.
 7. **PR format** — one issue per PR, red-on-main test stated, exclusions stated, no issue numbers inside code or commit messages.
 
 ## Output
@@ -7469,7 +7483,7 @@ drill_report  task=issue296            # tulis .drill/issue296/report.md
 
 ## `tools/build-source-bundle.mjs`
 
-sha256 `73197c1421460460271d98820d437e715669d66680c3fd93fcc518aa9a9c654d` · 90 lines
+sha256 `b81b3854dff97fa0e738aa7dade1042833b357731eab1e41ddaf4ee0e5299a97` · 96 lines
 
 ````javascript
 #!/usr/bin/env node
@@ -7510,12 +7524,18 @@ const declaredTests = p => readFileSync(join(repo, p), 'utf8').split('\n').filte
 
 const commit = git('rev-parse', 'HEAD')
 const branch = git('branch', '--show-current')
-const dirty = git('status', '--porcelain')
+// The bundle is a generated artifact that lives in the repo, so it always shows up
+// as dirty while being regenerated. Ignore its own path when judging the tree, or
+// every bundle would claim it was built from a dirty checkout.
+const bundlePath = `docs/DRILL-PLUGIN-SOURCE-BUNDLE-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}.md`
+const dirty = git('status', '--porcelain').split('\n').filter(l => l.trim() !== '' && !l.endsWith(bundlePath)).join('\n')
 const version = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')).version
 
 const suite = (() => {
   const out = execFileSync('node', ['--test', ...tests.map(p => join(repo, p))], { encoding: 'utf8' })
-  return out.split('\n').filter(l => /^# (tests|pass|fail|duration_ms)/.test(l) || l.startsWith('not ok')).join('\n')
+  // duration_ms is omitted on purpose: it changes every run, and a generated artifact
+  // that differs on every regeneration cannot be verified by diff.
+  return out.split('\n').filter(l => /^# (tests|pass|fail)/.test(l) || l.startsWith('not ok')).join('\n')
 })()
 
 const totalTests = tests.reduce((sum, p) => sum + declaredTests(p), 0)
@@ -8347,7 +8367,7 @@ test('a non-store file is not usable', () => {
 
 ## `test/errors.test.js`
 
-sha256 `2dcc29e74624767084bdd7e9e737da5239c1418c0957d60e27b0c0340ee44b9e` · 135 lines
+sha256 `96e8696dd4f94a2353800fa505d188004e8d8b1cf46debc7893967120df43324` · 135 lines
 
 ````javascript
 import assert from 'node:assert/strict'
@@ -8371,7 +8391,7 @@ stack backtrace:
    3: nodedb_sql::executor::apply::apply_put
              at ./nodedb-sql/src/executor/apply.rs:88:9
    4: tokio::runtime::task::raw::poll
-             at /home/maya/.cargo/registry/src/index.crates.io/tokio-1.40.0/src/runtime/task/raw.rs:271:5`
+             at /home/user/.cargo/registry/src/index.crates.io/tokio-1.40.0/src/runtime/task/raw.rs:271:5`
 
 const RUSTC = `error[E0308]: mismatched types
   --> nodedb/src/control/catalog/types.rs:41:9
@@ -8380,9 +8400,9 @@ const RUSTC = `error[E0308]: mismatched types
    |            ---   ^^^^^^^^^^^^^ expected \`u64\`, found \`CatalogError\``
 
 const PYTHON = `Traceback (most recent call last):
-  File "/home/maya/scripts/maya-state-query.py", line 42, in <module>
+  File "/home/user/scripts/state-query.py", line 42, in <module>
     main()
-  File "/home/maya/scripts/maya-state-query.py", line 31, in main
+  File "/home/user/scripts/state-query.py", line 31, in main
     get_conn()`
 
 test('a modern panic yields the message and the file:line:column frame', () => {
@@ -8420,8 +8440,8 @@ test('compiler diagnostics and tracebacks are parsed', () => {
 
   const python = parseFrames(PYTHON)
   assert.deepEqual(python.frames.map(f => `${f.file}:${f.line}`), [
-    '/home/maya/scripts/maya-state-query.py:42',
-    '/home/maya/scripts/maya-state-query.py:31',
+    '/home/user/scripts/state-query.py:42',
+    '/home/user/scripts/state-query.py:31',
   ], 'a traceback keeps both frames, and an absolute path outside a repository stays absolute')
 })
 
@@ -8440,9 +8460,9 @@ test('a pathological backtrace is capped and stays ordered', () => {
 
 test('path normalization strips noise and keeps external marking', () => {
   assert.deepEqual(normalizeFramePath('./src/a.rs'), { file: 'src/a.rs', external: false })
-  assert.deepEqual(normalizeFramePath('file:///home/maya/projects/nodedb/src/a.rs'), { file: 'nodedb/src/a.rs', external: false })
+  assert.deepEqual(normalizeFramePath('file:///home/user/projects/nodedb/src/a.rs'), { file: 'nodedb/src/a.rs', external: false })
   assert.equal(normalizeFramePath('/rustc/abc/library/core/src/panicking.rs').external, true)
-  assert.equal(normalizeFramePath('/home/maya/.cargo/registry/src/x/tokio/src/a.rs').external, true)
+  assert.equal(normalizeFramePath('/home/user/.cargo/registry/src/x/tokio/src/a.rs').external, true)
 })
 
 test('text without frames yields an empty result rather than a wrong one', () => {
@@ -8463,7 +8483,7 @@ test('toolchain and dependency paths are external even when printed relative', (
   assert.equal(normalizeFramePath('.cargo/registry/src/index.crates.io-6f17d22bba15001f/rand-0.8.5/src/rngs/thread.rs').external, true)
   // The absolute forms keep working.
   assert.equal(normalizeFramePath('/rustc/abc123/library/std/src/panicking.rs').external, true)
-  assert.equal(normalizeFramePath('/home/maya/.cargo/registry/src/x/rand-0.8.5/src/lib.rs').external, true)
+  assert.equal(normalizeFramePath('/home/user/.cargo/registry/src/x/rand-0.8.5/src/lib.rs').external, true)
   assert.equal(normalizeFramePath('/usr/lib/python3.12/site-packages/x.py').external, true)
   // And a repository that happens to contain such a directory still owns its file:
   // the prefixes only match at the start of the path.
@@ -8630,7 +8650,7 @@ test('roleBudget reports only a real non-negative integer cap', () => {
 
 ## `test/integration.test.js`
 
-sha256 `202a5060aec0eb1ddf7c3825b9b8fd152b5fab452072d777121098e64af103fe` · 882 lines
+sha256 `be244980d46c33a2681bc041a21409fd1a0259df3163f7c91936d4054a3157ae` · 882 lines
 
 ````javascript
 /**
@@ -9219,7 +9239,7 @@ test('a backtrace with no repository frame is a note, not localization', { skip 
     '   1: core::panicking::panic_fmt',
     '             at /rustc/9c3b1a1b1b1b1b1b1b1b1b1b1b1b1b1b/library/core/src/panicking.rs:72:14',
     '   2: rand::rngs::thread_rng',
-    '             at /home/maya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rand-0.8.5/src/rngs/thread.rs:64:9',
+    '             at /home/user/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rand-0.8.5/src/rngs/thread.rs:64:9',
   ].join('\n')
 
   const parsed = await call('drill_error', { error: failure })
@@ -9610,7 +9630,7 @@ test('the real pr-craft core scores a rendered body', { skip: !existsSync(DEFAUL
 
 ## `test/search.test.js`
 
-sha256 `9836787de167347494e23b161e698204f0970fa60cd47bd8594058fa0082d193` · 135 lines
+sha256 `bf1a0d746a4b8c32ba399a26d6fd7af3fce507a0120f94cf99bbfbab81e9a822` · 135 lines
 
 ````javascript
 import assert from 'node:assert/strict'
@@ -9700,9 +9720,9 @@ test('searchText reports an unavailable engine instead of throwing', () => {
 const hasTgrep = resolveBin('tgrep') !== null
 
 test('index paths are stable and root-specific', () => {
-  const a = indexSlug('/home/maya/projects/nodedb-296')
-  assert.equal(a, 'home-maya-projects-nodedb-296')
-  assert.equal(indexDirFor('/home/maya/projects/nodedb-296', '/cache'), join('/cache', a))
+  const a = indexSlug('/home/user/projects/nodedb-296')
+  assert.equal(a, 'home-user-projects-nodedb-296')
+  assert.equal(indexDirFor('/home/user/projects/nodedb-296', '/cache'), join('/cache', a))
   assert.notEqual(indexSlug('/a/b'), indexSlug('/a/c'))
 })
 

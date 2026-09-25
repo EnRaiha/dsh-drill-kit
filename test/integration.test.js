@@ -584,7 +584,7 @@ test('a backtrace with no repository frame is a note, not localization', { skip 
     '   1: core::panicking::panic_fmt',
     '             at /rustc/9c3b1a1b1b1b1b1b1b1b1b1b1b1b1b1b/library/core/src/panicking.rs:72:14',
     '   2: rand::rngs::thread_rng',
-    '             at /home/maya/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rand-0.8.5/src/rngs/thread.rs:64:9',
+    '             at /home/user/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rand-0.8.5/src/rngs/thread.rs:64:9',
   ].join('\n')
 
   const parsed = await call('drill_error', { error: failure })

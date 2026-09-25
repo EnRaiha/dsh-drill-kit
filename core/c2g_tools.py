@@ -33,7 +33,7 @@ import time
 from pathlib import Path
 
 VERSION = "1.1.0"
-LOG = Path("/home/maya/logs/c2g.log")
+LOG = Path(os.environ.get("C2G_LOG") or Path.home() / "logs" / "c2g.log")
 MAX_CAPTURE = 200_000
 MAX_OUT = 40_000
 DEFAULT_TIMEOUT = 180

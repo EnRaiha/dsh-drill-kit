@@ -60,7 +60,7 @@ finds attribute patterns. Use `tgrep`/`rg` for text, `sg` for shape, `c2g` for r
 ```bash
 # core CLI (no plugin needed)
 python3 ~/scripts/c2g_tools.py describe
-printf '{"tool":"blast_radius","name":"coerce_value","root":"/home/maya/projects/nodedb"}' \
+printf '{"tool":"blast_radius","name":"coerce_value","root":"$HOME/projects/nodedb"}' \
   | python3 ~/scripts/c2g_tools.py run --stdin
 ```
 
