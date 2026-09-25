@@ -201,6 +201,7 @@ Everything the plugin can rebuild lives under one root — `~/.cache/dsh-drill` 
 
 **One week idle time to live.** Three rules keep it honest:
 
+- **The active scope snapshot is picked deterministically.** Upstream keys `active_snapshots` by `(resolver_tier, completeness)` with `completeness IN (0,1)`, so a cache can hold a partial graph and a complete one at the same time. Every query reads `… WHERE resolver_tier='scope' ORDER BY completeness DESC LIMIT 1`: the complete snapshot wins, a partial one is used only when it is all the cache has, and — because all queries share that fragment — symbols and edges never come from two different snapshots. When only a partial snapshot answered, the record says `partial scope snapshot, callers may be under-reported` instead of presenting an incomplete graph as the graph.
 - **The c2g cache schema version is re-read on every hit**, not just when the entry was written: one `PRAGMA user_version` query (~2 ms) per answer. Our stages read specific tables (`graph_symbols`, `graph_edges`, `active_snapshots`), so if upstream bumps the cache schema, every c2g-backed record carries `c2g cache schema v4, expected v3 — upstream changed the cache format; verify these queries before trusting the result` instead of quietly reporting a graph it no longer understands. Reading it on the hit is what keeps the drift from hiding behind the seven-day TTL.
 - The TTL measures **idleness, not age**: a lookup touches the entry it used, so an index for a worktree still being drilled survives and one abandoned for a week is removed. `prune` runs whenever `drill_index` builds, and `drill_cache prune` runs it on demand. `cacheTtlDays: 0` disables expiry.
 - A cached answer is re-validated on read: the database file must still exist, and the entry must carry a snapshot id. Coverage means *can answer* — a c2g cache without an active scope snapshot (for example one rooted at a home directory, or a `/tmp` fixture) is not a candidate, because every query resolves through that snapshot. `drill_start` therefore reports the engine that will actually answer.
@@ -230,7 +231,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 100 tests
+npm test        # node --test test/*.test.js — 103 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts

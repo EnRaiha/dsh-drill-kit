@@ -773,10 +773,10 @@ test('drill_review removes its session listener on every exit path', { skip }, a
   await call('drill_review', { task: 'listener-drill' })
   assert.equal(ctx.listeners.has('session/event'), false, 'a second review does not accumulate listeners')
 })
-
 test('a role that says maxToolCalls: 0 means no cap, not the row default', { skip }, async () => {
   const { execFileSync } = await import('node:child_process')
   const { mkdirSync } = await import('node:fs')
+  const { evaluate } = await import('../lib/gates.js')
   const repo = join(workspace, 'review-budget-repo')
   mkdirSync(join(repo, '.dsh', 'roles'), { recursive: true })
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
@@ -789,13 +789,30 @@ test('a role that says maxToolCalls: 0 means no cap, not the row default', { ski
   writeFileSync(join(repo, '.dsh', 'roles', 'uncapped-auditor.md'), '---\nname: uncapped-auditor\ntools: [read]\nmaxToolCalls: 0\n---\n\nRead-only, no tool cap.\n')
   writeFileSync(join(repo, '.dsh', 'roles', 'rolesselected-auditor.md'), '---\nname: rollesselected-auditor\ntools: [read]\n---\n\nRead-only, no budget key at all.\n')
 
+  // The fake reviewer reports PASS unless the plugin's own budget listener
+  // aborted its signal — so this test exercises the real predicate, not just
+  // the string the artifact prints.
   const subagents = {
-    async start() {
-      return {
-        id: 'child-budget',
-        result: Promise.resolve({ stopReason: 'completed', structured: { verdict: 'PASS', blockers: [], unverified: [], summary: 'clean' } }),
-        async dispose() {},
-      }
+    async start(provider, request) {
+      const id = 'child-budget'
+      const signal = request.signal
+      const result = new Promise(resolve => {
+        setTimeout(() => {
+          const onEvent = ctx.listeners.get('session/event')
+          for (let i = 0; i < 50; i += 1) onEvent?.({ id }, { type: 'tool/call' })
+          const aborted = signal.aborted
+          resolve({
+            stopReason: aborted ? 'aborted' : 'completed',
+            structured: {
+              verdict: aborted ? 'FAIL' : 'PASS',
+              blockers: aborted ? ['the review hit its tool budget'] : [],
+              unverified: [],
+              summary: aborted ? 'aborted at the cap' : 'survived 50 tool calls',
+            },
+          })
+        }, 5)
+      })
+      return { id, result, async dispose() {} }
     },
   }
   const mod = await import('../index.js')
@@ -803,16 +820,62 @@ test('a role that says maxToolCalls: 0 means no cap, not the row default', { ski
   mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, maxReviewToolCalls: 7 }))
   const exec = { signal: new AbortController().signal, agent: { session: { id: 's-budget', header: { cwd: repo } } } }
   const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+  const lastReview = () => {
+    const ledger = readFileSync(join(repo, '.drill', 'budget-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+    return ledger.filter(e => e.kind === 'review').at(-1)
+  }
 
   await call('drill_start', { task: 'budget-drill', repo, base: 'HEAD' })
-  await call('drill_review', { task: 'budget-drill', role: 'uncapped-auditor' })
-  const ledger = readFileSync(join(repo, '.drill', 'budget-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
-  const uncapped = readFileSync(ledger.filter(e => e.kind === 'review').at(-1).log, 'utf8')
-  assert.match(uncapped, /role: uncapped-auditor \(project\)/)
-  assert.match(uncapped, /toolCalls: 0\/unlimited/, '0 is "no cap", not "fall back to 7"')
 
-  await call('drill_review', { task: 'budget-drill', role: 'rolesselected-auditor' })
-  const ledger2 = readFileSync(join(repo, '.drill', 'budget-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
-  const fallback = readFileSync(ledger2.filter(e => e.kind === 'review').at(-1).log, 'utf8')
-  assert.match(fallback, /toolCalls: 0\/7/, 'a role with no budget key falls back to the row default')
+  // 0 is the documented "no cap": 50 tool calls must not trip anything.
+  const uncapped = await call('drill_review', { task: 'budget-drill', role: 'uncapped-auditor' })
+  assert.equal(uncapped.verdict, 'PASS', 'a role saying maxToolCalls: 0 is not capped')
+  const uncappedLog = readFileSync(lastReview().log, 'utf8')
+  assert.match(uncappedLog, /role: uncapped-auditor \(project\)/)
+  assert.match(uncappedLog, /toolCalls: 50\/unlimited/, '0 renders as unlimited, and all 50 calls were counted')
+
+  // A role with no budget key still falls back to the row default, and 50 calls
+  // blow through it — the abort has to reach the reviewer.
+  const capped = await call('drill_review', { task: 'budget-drill', role: 'rolesselected-auditor' })
+  assert.equal(capped.verdict, 'FAIL', 'the row default still caps the review')
+  assert.match(readFileSync(lastReview().log, 'utf8'), /toolCalls: 50\/7/)
+  assert.equal(evaluate(readFileSync(join(repo, '.drill', 'budget-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)).gates.find(g => g.id === 'review').ok, false, 'a capped FAIL leaves the gate open')
+})
+
+test('a cache with only a partial scope snapshot answers, and the record says so', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'partial-snapshot-repo')
+  const c2gDir = join(workspace, 'c2g-partial', 'proj')
+  mkdirSync(repo, { recursive: true })
+  mkdirSync(c2gDir, { recursive: true })
+  const db = join(c2gDir, 'cache.sqlite3')
+  execFileSync('sqlite3', [db], { input: `
+    CREATE TABLE meta (singleton INTEGER PRIMARY KEY, application_identity TEXT NOT NULL, canonical_root BLOB NOT NULL, project_key BLOB NOT NULL);
+    CREATE TABLE graph_snapshots (snapshot_id INTEGER PRIMARY KEY, resolver_tier TEXT NOT NULL, created_at_ns INTEGER NOT NULL);
+    CREATE TABLE active_snapshots (resolver_tier TEXT NOT NULL, completeness INTEGER NOT NULL, snapshot_id INTEGER NOT NULL, PRIMARY KEY (resolver_tier, completeness));
+    CREATE TABLE graph_symbols (snapshot_id INTEGER NOT NULL, ordinal INTEGER NOT NULL, id BLOB NOT NULL, scip TEXT NOT NULL, name TEXT NOT NULL, file TEXT NOT NULL, span_start INTEGER NOT NULL, span_end INTEGER NOT NULL, kind TEXT NOT NULL, symbol BLOB NOT NULL, PRIMARY KEY (snapshot_id, ordinal));
+    CREATE TABLE graph_edges (snapshot_id INTEGER NOT NULL, from_ord INTEGER NOT NULL, to_ord INTEGER NOT NULL, role TEXT NOT NULL, occurrence_file TEXT NOT NULL, occurrence_line INTEGER NOT NULL, confidence REAL NOT NULL);
+    INSERT INTO meta VALUES (1, 'code2graph-cache', '${repo}', x'00');
+    INSERT INTO graph_snapshots VALUES (4, 'scope', 0);
+    INSERT INTO active_snapshots VALUES ('scope', 0, 4);
+    INSERT INTO graph_symbols VALUES
+      (4, 1, x'41', 'a', 'half_indexed_fn', 'src/half.rs', 10, 40, '"Function"', '{"line":12}');
+    PRAGMA user_version = 3;
+  ` })
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), c2gCacheDir: join(workspace, 'c2g-partial'), embedEnabled: false, prLint: false }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-partial', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'partial-drill', repo, base: 'HEAD' })
+  const located = await call('drill_locate', { symbol: 'half_indexed_fn' })
+  assert.equal(located.found, true, 'a partial snapshot still answers')
+
+  const ledger = readFileSync(join(repo, '.drill', 'partial-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const entry = ledger.filter(e => e.kind === 'locate').at(-1)
+  assert.deepEqual(entry.files, ['src/half.rs:12'], 'the hit is recorded as evidence')
+  assert.match(entry.note, /c2g cache schema v3 — partial scope snapshot, callers may be under-reported/, 'and the reader is told the graph is partial')
 })

@@ -103,3 +103,59 @@ test('unknown symbols resolve to no rows rather than throwing', () => {
 test('query refuses to write through the read-only connection', () => {
   assert.throws(() => query(dbPath, "INSERT INTO meta VALUES (2,'x','y',x'00')"), /readonly|attempt to write/i)
 })
+
+// Upstream keys `active_snapshots` by (resolver_tier, completeness) with
+// completeness IN (0,1), so a tier can hold a partial snapshot and a complete
+// one at once. The queries must read exactly one of them, and prefer the
+// complete graph.
+const twoSlotDir = join(root, 'projects', 'twoslot')
+const twoSlotDb = join(twoSlotDir, 'cache.sqlite3')
+mkdirSync(twoSlotDir, { recursive: true })
+const REPO_TWO = '/tmp/fake-two-slot'
+execFileSync('sqlite3', [twoSlotDb], { input: `
+CREATE TABLE meta (singleton INTEGER PRIMARY KEY, application_identity TEXT NOT NULL, canonical_root BLOB NOT NULL, project_key BLOB NOT NULL);
+CREATE TABLE graph_snapshots (snapshot_id INTEGER PRIMARY KEY, resolver_tier TEXT NOT NULL, created_at_ns INTEGER NOT NULL);
+CREATE TABLE active_snapshots (resolver_tier TEXT NOT NULL, completeness INTEGER NOT NULL, snapshot_id INTEGER NOT NULL, PRIMARY KEY (resolver_tier, completeness));
+CREATE TABLE graph_symbols (snapshot_id INTEGER NOT NULL, ordinal INTEGER NOT NULL, id BLOB NOT NULL, scip TEXT NOT NULL, name TEXT NOT NULL, file TEXT NOT NULL, span_start INTEGER NOT NULL, span_end INTEGER NOT NULL, kind TEXT NOT NULL, symbol BLOB NOT NULL, PRIMARY KEY (snapshot_id, ordinal));
+CREATE TABLE graph_edges (snapshot_id INTEGER NOT NULL, from_ord INTEGER NOT NULL, to_ord INTEGER NOT NULL, role TEXT NOT NULL, occurrence_file TEXT NOT NULL, occurrence_line INTEGER NOT NULL, confidence REAL NOT NULL);
+INSERT INTO meta VALUES (1, 'code2graph-cache', '${REPO_TWO}', x'00');
+INSERT INTO graph_snapshots VALUES (8, 'scope', 1), (9, 'scope', 2);
+INSERT INTO active_snapshots VALUES ('scope', 0, 8), ('scope', 1, 9);
+INSERT INTO graph_symbols VALUES
+  (8, 1, x'11', 'p', 'partial_only', 'src/partial.rs', 1, 9, '"Function"', '{"line":1}'),
+  (9, 1, x'21', 'q', 'shared_fn',   'src/shared.rs', 1, 9, '"Function"', '{"line":1}'),
+  (9, 2, x'22', 'r', 'complete_only','src/complete.rs', 1, 9, '"Function"', '{"line":1}');
+INSERT INTO graph_edges VALUES (9, 1, 2, '"Call"', 'src/shared.rs', 4, 0.9);
+` })
+
+test('a tier with a partial and a complete snapshot resolves to the complete one', () => {
+  const found = discoverDb(REPO_TWO, join(root, 'projects'))
+  assert.equal(found?.snapshotId, 9, 'the complete snapshot (completeness 1) is the one that answers')
+  assert.equal(found?.completeness, 1)
+
+  assert.deepEqual(locateByName(twoSlotDb, 'complete_only').map(r => r.file), ['src/complete.rs'])
+  assert.deepEqual(locateByName(twoSlotDb, 'shared_fn').map(r => r.file), ['src/shared.rs'])
+  assert.deepEqual(locateByName(twoSlotDb, 'partial_only'), [], 'rows from the partial snapshot never leak into an answer')
+  assert.deepEqual(callers(twoSlotDb, 'complete_only').map(r => r.caller), ['shared_fn'], 'edges resolve inside the same snapshot')
+})
+
+test('a cache holding only a partial snapshot still answers, and says it is partial', () => {
+  const partialDir = join(root, 'projects', 'partialonly')
+  const partialDb = join(partialDir, 'cache.sqlite3')
+  mkdirSync(partialDir, { recursive: true })
+  execFileSync('sqlite3', [partialDb], { input: `
+CREATE TABLE meta (singleton INTEGER PRIMARY KEY, application_identity TEXT NOT NULL, canonical_root BLOB NOT NULL, project_key BLOB NOT NULL);
+CREATE TABLE graph_snapshots (snapshot_id INTEGER PRIMARY KEY, resolver_tier TEXT NOT NULL, created_at_ns INTEGER NOT NULL);
+CREATE TABLE active_snapshots (resolver_tier TEXT NOT NULL, completeness INTEGER NOT NULL, snapshot_id INTEGER NOT NULL, PRIMARY KEY (resolver_tier, completeness));
+CREATE TABLE graph_symbols (snapshot_id INTEGER NOT NULL, ordinal INTEGER NOT NULL, id BLOB NOT NULL, scip TEXT NOT NULL, name TEXT NOT NULL, file TEXT NOT NULL, span_start INTEGER NOT NULL, span_end INTEGER NOT NULL, kind TEXT NOT NULL, symbol BLOB NOT NULL, PRIMARY KEY (snapshot_id, ordinal));
+CREATE TABLE graph_edges (snapshot_id INTEGER NOT NULL, from_ord INTEGER NOT NULL, to_ord INTEGER NOT NULL, role TEXT NOT NULL, occurrence_file TEXT NOT NULL, occurrence_line INTEGER NOT NULL, confidence REAL NOT NULL);
+INSERT INTO meta VALUES (1, 'code2graph-cache', '/tmp/fake-partial-only', x'00');
+INSERT INTO graph_snapshots VALUES (5, 'scope', 1);
+INSERT INTO active_snapshots VALUES ('scope', 0, 5);
+INSERT INTO graph_symbols VALUES (5, 1, x'31', 's', 'lonely_fn', 'src/lonely.rs', 1, 9, '"Function"', '{"line":1}');
+` })
+  const found = discoverDb('/tmp/fake-partial-only', join(root, 'projects'))
+  assert.equal(found?.snapshotId, 5, 'a partial snapshot is still coverage')
+  assert.equal(found?.completeness, 0, 'and it reports itself as partial')
+  assert.deepEqual(locateByName(partialDb, 'lonely_fn').map(r => r.file), ['src/lonely.rs'])
+})

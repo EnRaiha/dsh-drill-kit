@@ -120,7 +120,7 @@ function c2gInfo(repo, config) {
     const found = config.c2gCacheDir && config.c2gCacheDir.length > 0
       ? discoverDb(repo, config.c2gCacheDir, config.sqliteBin, options)
       : discoverDb(repo, undefined, config.sqliteBin, options)
-    return found === null ? null : { db: found.db, schemaVersion: found.schemaVersion ?? null }
+    return found === null ? null : { db: found.db, schemaVersion: found.schemaVersion ?? null, completeness: found.completeness ?? null }
   } catch {
     return null
   }
@@ -133,18 +133,23 @@ function c2gDb(repo, config) {
 
 /**
  * The note every c2g-backed record carries: which database answered, at which
- * cache schema. The per-project cache is the upstream CLI's format
- * (`cli/src/cache/schema.rs`, SCHEMA_VERSION 3), so a bump upstream can break
- * these queries silently — record the version, and say so when it moved.
+ * cache schema, and whether that snapshot is the complete graph. The
+ * per-project cache is the upstream CLI's format (`cli/src/cache/schema.rs`,
+ * SCHEMA_VERSION 3), so a bump upstream can break these queries silently —
+ * record the version, and say so when it moved. Upstream keys the active slot
+ * by `(tier, completeness)`, so a cache that carries only a partial scope
+ * snapshot still answers — and under-reports callers, which the reader has to
+ * know about.
  */
 function c2gNote(info) {
   if (info === null) return ''
   const version = info.schemaVersion
-  if (version === null) return `c2g cache ${info.db} (schema version unreadable)`
+  const partial = info.completeness === 0
+  if (version === null) return `c2g cache ${info.db} (schema version unreadable)${partial ? ' — partial snapshot, callers may be under-reported' : ''}`
   if (version !== C2G_SCHEMA_VERSION) {
     return `c2g cache schema v${version}, expected v${C2G_SCHEMA_VERSION} — upstream changed the cache format; verify these queries before trusting the result`
   }
-  return `c2g cache schema v${version}`
+  return `c2g cache schema v${version}${partial ? ' — partial scope snapshot, callers may be under-reported' : ''}`
 }
 
 /** The drill cache root in use: `cacheDir` config, else the default cache root. */
