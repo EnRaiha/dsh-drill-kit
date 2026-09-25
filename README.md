@@ -33,13 +33,14 @@ It finds the DSH checkout itself (`dsh` on `PATH`, `$HOME/projects/deepseek-harn
 
 Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, `--manager`, `--skills`, `--frontends`, `--verify`, `--uninstall`, `--force`, `--dry-run`.
 
-**Until the package is on npm, install it by path or by URL** — a bare `dsh plugin add dsh-drill` resolves against the registry and fails with a 404 while the name is unpublished:
-
 ```sh
-dsh plugin --profile tkg-web add /path/to/dsh-drill-kit          # local checkout
-dsh plugin --profile tkg-web add github:EnRaiha/dsh-drill-kit    # or from this repo
-dsh plugin --profile tkg-web add github:EnRaiha/dsh-drill-kit#v0.8.3   # pinned to a release
+dsh plugin --profile <profile> add dsh-drill              # from npm
+dsh plugin --profile <profile> add dsh-drill@0.8.4        # pinned
+dsh plugin --profile <profile> add /path/to/dsh-drill-kit # local checkout
+dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.4
 ```
+
+The plugin imports three host modules (`@deepseek-ai/dsh-tools`, `dsh-llm`, `schemastery`). They are reachable through the profile the plugin loads into, so the first two are declared **optional** peers — a missing host fails loudly at import — and `schemastery`, a runtime validator rather than a host service, ships as a regular dependency.
 
 Or by hand:
 
@@ -87,7 +88,7 @@ What is *this* repository's own work: the gate implementation and ledger (`index
 
 ## Status
 
-`dsh-drill` **v0.8.3** · 16 tools · 104 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
+`dsh-drill` **v0.8.4** · 16 tools · 104 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
 
 ## Licence
 

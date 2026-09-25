@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.3**, source revision `100dbec14244` on branch `master`, tree clean (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.4**, source revision `100dbec14244` on branch `master`, tree DIRTY (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -11,12 +11,12 @@
 | `.github/workflows/publish.yml` | 37 | 1270 | `8392c0bbbcb091b4` | — |
 | `.gitignore` | 4 | 28 | `1adbb37be33001da` | — |
 | `LICENSE` | 22 | 1064 | `2f841f07845b05a9` | — |
-| `README.md` | 356 | 33629 | `f3e36d5f6d0176cc` | — |
+| `README.md` | 357 | 33816 | `a34ec80d94e1c29d` | — |
 | `cordis.patch.yml` | 9 | 300 | `7b935022f8a8569a` | — |
 | `core/README.md` | 39 | 2842 | `63a0a42187d0161a` | — |
 | `core/c2g_tools.py` | 674 | 26464 | `bc13afe99510c89e` | — |
 | `core/pr_craft.py` | 488 | 26669 | `eb02e28af4b86fc5` | — |
-| `docs/README.md` | 28 | 2891 | `d617a76955e43ba7` | — |
+| `docs/README.md` | 28 | 2891 | `29d6f38240a003b9` | — |
 | `frontends/README.md` | 46 | 2336 | `3c88c71470530bd6` | — |
 | `frontends/hermes/c2g/SKILL.md` | 89 | 5510 | `ea3640f117e6a831` | — |
 | `frontends/hermes/c2g/__init__.py` | 31 | 1592 | `4fe73484f698bcf9` | — |
@@ -45,7 +45,7 @@
 | `lib/role.js` | 161 | 6175 | `a598d2bca4a2b564` | — |
 | `lib/runner.js` | 91 | 3367 | `c4c1b3d80baba0e8` | — |
 | `lib/search.js` | 303 | 12658 | `e973f0abbc09846d` | — |
-| `package.json` | 70 | 1946 | `4a51ec81014972df` | — |
+| `package.json` | 78 | 2084 | `bc8af87e07688bff` | — |
 | `roles/drill-auditor.md` | 55 | 3019 | `107e089732dc1579` | — |
 | `skills/drill/SKILL.md` | 68 | 5524 | `5b4c9a06a6dc254b` | — |
 | `tools/build-source-bundle.mjs` | 98 | 5401 | `7bc478d7e6669192` | — |
@@ -59,7 +59,7 @@
 | `test/pr.test.js` | 97 | 5612 | `13c93f92f822c760` | 7 |
 | `test/search.test.js` | 135 | 6629 | `bf1a0d746a4b8c32` | 11 |
 
-**Totals:** 9774 lines across 50 files; 104 tests declared across 9 test files.
+**Totals:** 9783 lines across 50 files; 104 tests declared across 9 test files.
 
 ## The test run, recorded
 
@@ -158,7 +158,7 @@ SOFTWARE.
 
 ## `README.md`
 
-sha256 `f3e36d5f6d0176cc60aeef5732c3db459affded027d68a4b58864b5141cc6a63` · 356 lines
+sha256 `a34ec80d94e1c29dfd6a76858ab18a3f62e7133c56b4279cc3d3f4042114d456` · 357 lines
 
 ````markdown
 # The drill kit
@@ -196,13 +196,14 @@ It finds the DSH checkout itself (`dsh` on `PATH`, `$HOME/projects/deepseek-harn
 
 Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, `--manager`, `--skills`, `--frontends`, `--verify`, `--uninstall`, `--force`, `--dry-run`.
 
-**Until the package is on npm, install it by path or by URL** — a bare `dsh plugin add dsh-drill` resolves against the registry and fails with a 404 while the name is unpublished:
-
 ```sh
-dsh plugin --profile tkg-web add /path/to/dsh-drill-kit          # local checkout
-dsh plugin --profile tkg-web add github:EnRaiha/dsh-drill-kit    # or from this repo
-dsh plugin --profile tkg-web add github:EnRaiha/dsh-drill-kit#v0.8.3   # pinned to a release
+dsh plugin --profile <profile> add dsh-drill              # from npm
+dsh plugin --profile <profile> add dsh-drill@0.8.4        # pinned
+dsh plugin --profile <profile> add /path/to/dsh-drill-kit # local checkout
+dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.4
 ```
+
+The plugin imports three host modules (`@deepseek-ai/dsh-tools`, `dsh-llm`, `schemastery`). They are reachable through the profile the plugin loads into, so the first two are declared **optional** peers — a missing host fails loudly at import — and `schemastery`, a runtime validator rather than a host service, ships as a regular dependency.
 
 Or by hand:
 
@@ -250,7 +251,7 @@ What is *this* repository's own work: the gate implementation and ledger (`index
 
 ## Status
 
-`dsh-drill` **v0.8.3** · 16 tools · 104 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
+`dsh-drill` **v0.8.4** · 16 tools · 104 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
 
 ## Licence
 
@@ -1754,7 +1755,7 @@ if __name__ == "__main__":
 
 ## `docs/README.md`
 
-sha256 `d617a76955e43ba7bc8d7f6c9a8493a079e09c753b8733f2069197686816639c` · 28 lines
+sha256 `29d6f38240a003b9251cc2b4ff6b28d9db76f3b984953c06930dd22c7f0d4af9` · 28 lines
 
 ````markdown
 # Docs
@@ -1763,7 +1764,7 @@ Everything the drill work produced, in reading order.
 
 | Document | What it is | Status |
 |---|---|---|
-| [`DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`](DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md) | **The canonical specification.** What the drill is, why it exists, the ledger data model, the three c2g resolution layers, the 16-tool reference implementation, the operating guide, both reviews (§7) and the risk register (§8), plus Appendices A–D. | current (v0.8.3, 104 tests) |
+| [`DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`](DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md) | **The canonical specification.** What the drill is, why it exists, the ledger data model, the three c2g resolution layers, the 16-tool reference implementation, the operating guide, both reviews (§7) and the risk register (§8), plus Appendices A–D. | current (v0.8.4, 104 tests) |
 | [`DRILL-PLUGIN-SOURCE-BUNDLE-20260925.md`](DRILL-PLUGIN-SOURCE-BUNDLE-20260925.md) | **Generated snapshot for reviewers.** All 29 tracked files inline, with per-file `sha256` + line counts, the declared test count per file, and the recorded `node --test` run. Regenerate with `node tools/build-source-bundle.mjs`. | generated at the commit in its header |
 | [`DRILL-E2E-REVIEW-20260925.md`](DRILL-E2E-REVIEW-20260925.md) | The first end-to-end review as a standalone record: method, the seven defects it found (gate binding, unbound `cwd`-style holes, rule-8 misses, mislabelled diffs), what was verified true, what stayed unverified. | historical — its content is §7 of the full doc |
 | [`DRILL-BUG-FULL-DOC-20260925.md`](DRILL-BUG-FULL-DOC-20260925.md) | The specification as it stood at **v0.8.0**, before the second review. | historical |
@@ -7639,12 +7640,12 @@ export function definitionPattern(symbol, language = 'rust') {
 
 ## `package.json`
 
-sha256 `4a51ec81014972df5c681034f7740e3a7f69e3cbd1d16b68adcb517d06dbe011` · 70 lines
+sha256 `bc8af87e07688bffaedfac8363e87d3e55c0375a200a372a68f152441fb5aa12` · 78 lines
 
 ````json
 {
   "name": "dsh-drill",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "Evidence-gated bug-fix drill for DeepSeek Harness: failure signal to symbols, stage gates that a negative lookup cannot satisfy, plugin-run red/green proofs bound to a commit, c2g localization with a tgrep fallback, and a PR body rendered from the ledger.",
   "type": "module",
   "main": "./index.js",
@@ -7676,10 +7677,15 @@ sha256 `4a51ec81014972df5c681034f7740e3a7f69e3cbd1d16b68adcb517d06dbe011` · 70 
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
     "@deepseek-ai/dsh-llm": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
-    "@deepseek-ai/dsh-subagent": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
-    "@deepseek-ai/schemastery": ">=3.18.0 <4.0.0"
+    "@deepseek-ai/dsh-subagent": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-subagent": {
       "optional": true
     }
@@ -7709,6 +7715,9 @@ sha256 `4a51ec81014972df5c681034f7740e3a7f69e3cbd1d16b68adcb517d06dbe011` · 70 
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.0"
   }
 }
 ````
