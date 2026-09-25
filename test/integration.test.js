@@ -8,7 +8,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -64,7 +64,7 @@ test('the module implements the host contract and compiles every tool schema', {
   const ctx = fakeContext()
   mod.apply(ctx, mod.Config({ cacheDir: join(workspace, 'cache') }))
 
-  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_search', 'drill_index', 'drill_cache', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
+  const expected = ['drill_start', 'drill_locate', 'drill_blast', 'drill_diff', 'drill_search', 'drill_index', 'drill_cache', 'drill_error', 'drill_pr', 'drill_record', 'drill_run', 'drill_gate', 'drill_status', 'drill_report', 'drill_review', 'drill_setup']
   assert.deepEqual([...ctx.tools_registered.keys()].sort(), expected.sort())
   for (const [name, definition] of ctx.tools_registered) {
     assert.equal(typeof definition.output.render, 'function', `${name} must render`)
@@ -395,4 +395,93 @@ test('the merged c2g store answers before any text search', { skip }, async () =
   assert.match(blast.callers[0], /caller_fn nodedb\/src\/control\/c\.rs:12/)
   const blastRecord = readFileSync(join(workspace, '.drill', 'embed-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.kind === 'blast').at(-1)
   assert.match(blastRecord.note, /resolved links, snapshot not per-worktree HEAD/)
+})
+
+test('drill_error resolves a panic through the c2g cache and records it as locate evidence', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'panic-repo')
+  const c2gDir = join(workspace, 'c2g-projects', 'proj')
+  mkdirSync(repo, { recursive: true })
+  mkdirSync(c2gDir, { recursive: true })
+  const db = join(c2gDir, 'cache.sqlite3')
+  execFileSync('sqlite3', [db], { input: `
+    CREATE TABLE meta (singleton INTEGER PRIMARY KEY, application_identity TEXT NOT NULL, canonical_root BLOB NOT NULL, project_key BLOB NOT NULL);
+    CREATE TABLE graph_snapshots (snapshot_id INTEGER PRIMARY KEY, resolver_tier TEXT NOT NULL, created_at_ns INTEGER NOT NULL);
+    CREATE TABLE active_snapshots (resolver_tier TEXT NOT NULL, completeness INTEGER NOT NULL, snapshot_id INTEGER NOT NULL, PRIMARY KEY (resolver_tier, completeness));
+    CREATE TABLE graph_symbols (snapshot_id INTEGER NOT NULL, ordinal INTEGER NOT NULL, id BLOB NOT NULL, scip TEXT NOT NULL, name TEXT NOT NULL, file TEXT NOT NULL, span_start INTEGER NOT NULL, span_end INTEGER NOT NULL, kind TEXT NOT NULL, symbol BLOB NOT NULL, PRIMARY KEY (snapshot_id, ordinal));
+    CREATE TABLE graph_edges (snapshot_id INTEGER NOT NULL, from_ord INTEGER NOT NULL, to_ord INTEGER NOT NULL, role TEXT NOT NULL, occurrence_file TEXT NOT NULL, occurrence_line INTEGER NOT NULL, confidence REAL NOT NULL);
+    INSERT INTO meta VALUES (1, 'code2graph-cache', '${repo}', x'00');
+    INSERT INTO graph_snapshots VALUES (1, 'scope', 0);
+    INSERT INTO active_snapshots VALUES ('scope', 1, 1);
+    INSERT INTO graph_symbols VALUES
+      (1, 1, x'01', 'a', 'nextval_batch', 'nodedb/src/control/sequence/registry.rs', 200, 260, '"Function"', '{"line":227}');
+  ` })
+  const panic = `thread 'main' panicked at nodedb/src/control/sequence/registry.rs:227:5:
+called \`Option::unwrap()\` on a \`None\` value
+   0: nodedb::control::sequence::registry::nextval_batch
+             at ./nodedb/src/control/sequence/registry.rs:231:5
+   1: rust_begin_unwind
+             at /rustc/abc/library/std/src/panicking.rs:597:5`
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), c2gCacheDir: join(workspace, 'c2g-projects'), embedEnabled: false, prLint: false }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-panic', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'panic-drill', repo, base: 'HEAD', issue: '314' })
+  const result = await call('drill_error', { error: panic })
+  assert.equal(result.message, 'called `Option::unwrap()` on a `None` value')
+  assert.equal(result.external, 1, 'the rustc frame is marked external')
+  assert.equal(result.resolved, 2, 'the panic header and the backtrace frame both resolve to the containing symbol')
+  assert.match(result.sources, /c2g/)
+  assert.match(result.frames.join('\n'), /registry\.rs:227:5 → nextval_batch \[Function\] \(c2g\)/, 'the panic header resolves through the c2g cache')
+  assert.match(result.frames.join('\n'), /registry\.rs:231:5 → nextval_batch \[Function\] \(c2g\)/, 'the backtrace frame resolves to the containing symbol')
+  assert.match(result.frames.join('\n'), /rustc\/abc.*\(external\)/)
+
+  const ledger = readFileSync(join(repo, '.drill', 'panic-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const locate = ledger.filter(e => e.kind === 'locate').at(-1)
+  assert.deepEqual(locate.files, ['nodedb/src/control/sequence/registry.rs:227', 'nodedb/src/control/sequence/registry.rs:231'])
+  assert.match(locate.note, /repository frame\(s\)/)
+  const { evaluate } = await import('../lib/gates.js')
+  assert.ok(evaluate(ledger).gates.some(g => g.id === 'localize' && g.ok), 'the frames close the localize gate')
+})
+
+test('drill_pr writes the body, lints it, and only records a clean one', { skip }, async () => {
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'pr-repo')
+  mkdirSync(repo, { recursive: true })
+  const core = join(workspace, 'pr-core.py')
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, prCore: core, prLint: true }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-pr', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+
+  await call('drill_start', { task: 'pr-drill', repo, base: 'HEAD', issue: '314' })
+  await call('drill_run', { stage: 'patch', arm: 'base', cmd: 'exit 101', label: 'red' })
+  await call('drill_run', { stage: 'patch', arm: 'fix', cmd: 'exit 0', label: 'green' })
+  await call('drill_record', { kind: 'review', stage: 'review', verdict: 'PASS', blockers: 0 })
+
+  // A core that blocks: the body is written but must not close the pr gate.
+  writeFileSync(core, 'import json,sys\njson.load(sys.stdin)\nprint(json.dumps({"ok": False, "score": 40, "verdict": "fix blockers first", "issues": [{"level": "blocker", "rule": "why-missing", "msg": "say why"}], "good": []}))\n')
+  const blocked = await call('drill_pr', { title: 'fix: guard the empty registry' })
+  assert.equal(blocked.recorded, false)
+  assert.deepEqual(blocked.blockers, ['why-missing: say why'])
+  assert.equal(existsSync(blocked.bodyPath), true, 'the body file is still written for the author to fix')
+  assert.match(readFileSync(blocked.bodyPath, 'utf8'), /## How it was verified/)
+  assert.ok(!blocked.gates.includes('pass:pr'), 'the pr gate stays open while the lint blocks')
+
+  writeFileSync(core, 'import json,sys\njson.load(sys.stdin)\nprint(json.dumps({"ok": True, "score": 95, "verdict": "ok", "issues": [], "good": ["subject length ok"]}))\n')
+  const clean = await call('drill_pr', { title: 'fix: guard the empty sequence registry', why: 'The registry panicked on an empty sequence.' })
+  assert.equal(clean.recorded, true)
+  assert.equal(clean.lintOk, true)
+  assert.ok(clean.gates.includes('pass:pr'))
+  assert.equal(clean.gates.includes('pass:review'), true)
+
+  const ledger = readFileSync(join(repo, '.drill', 'pr-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+  const pr = ledger.filter(e => e.kind === 'pr').at(-1)
+  assert.equal(pr.bodyPath, clean.bodyPath)
+  assert.match(pr.note, /lint score 95/)
 })

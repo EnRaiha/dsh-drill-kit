@@ -10,14 +10,14 @@ Built for the NodeDB drill (`red → green → fmt/clippy → preflight → comm
 
 | Stage | Gate | Evidence required |
 |---|---|---|
-| 1 Localize | `localize` | one `locate` record naming file:line (usually via `drill_locate` over the local code2graph cache) |
+| 1 Localize | `localize` | one `locate` record naming file:line — from the failure signal (`drill_error` resolves each frame) or by symbol (`drill_locate`) |
 | 2 Blast radius | `blast` | one `blast` record with callers/callees/affected files (`drill_blast`), and/or the branch diff plus its dependents (`drill_diff`) |
 | 3 Edge cases | `edge` | one `edge` record stating the invariants that must fail — `drill_diff` proposes a checklist, you supply the invariants |
 | 4 Surgical patch | **`red`** | a `test` run with `arm=base` that **fails**, with a captured log |
 | | **`green`** | a `test` run with `arm=fix` that **passes**, with a captured log |
 | | **`hygiene`** | a `hygiene` run (fmt/clippy/preflight) with `exit 0` |
 | 5 Review | **`review`** | a `review` record with `verdict=PASS`, `blockers=0`, **and the same commit as the green proof**; a later FAIL or a moved HEAD reopens the gate |
-| 6 PR | `pr` | a `pr` record pointing at the PR body file |
+| 6 PR | `pr` | a `pr` record pointing at the PR body file; `drill_pr` writes it and refuses to record one whose lint has blockers |
 
 `red`, `green`, `hygiene` and `review` are **required** before `drill_gate` reports `ready`. The rest are advisory gates that describe where the work stopped.
 
@@ -26,12 +26,14 @@ Built for the NodeDB drill (`red → green → fmt/clippy → preflight → comm
 | Tool | What it does |
 |---|---|
 | `drill_start` | open a task: ledger + `active.json` + gate report |
+| `drill_error` | stage 1 from the signal: parse a panic, backtrace, compiler diagnostic or traceback into `file:line` frames and resolve each frame to its symbol (cache → merged store). Records `locate`. |
 | `drill_locate` | stage 1 over the local c2g cache: symbol name, or `file`+`line` from a stack frame → exact definition. Records `locate`. |
 | `drill_blast` | stage 2 over the same cache: call sites, transitive callers to a bounded depth, callees. Records `blast`. |
 | `drill_diff` | stage 2b from git: changed files against the base ref, deleted files, the files that depend on them (c2g reverse edges), and a proposed manual-test checklist. Records `blast`. |
 | `drill_search` | text search with `tgrep` (trigram index) or `rg`: for questions the graph cannot answer — a config key, an error string, a SQL fragment, a doc claim. Optionally records the hits as `locate`/`blast`/`edge` evidence, always labelled text-level. |
 | `drill_index` | build or refresh the **out-of-tree** tgrep index for the drill repository, so stages 1–2 stop scanning: the index lands in the cache directory, never inside the worktree, and `git status` stays clean. Prunes idle indexes on the way. |
 | `drill_cache` | `status` / `prune` / `clear` the derived cache: sizes, entry counts, the idle TTL, and what pruning freed. |
+| `drill_pr` | stage 7: render the PR body from the ledger (why, changed files, red/green/preflight rows with exit codes and commits, Review 2 verdict, gate table), write it, score it with the PR-craft core, and record `pr` evidence only when the lint has no blockers. |
 | `drill_run` | run a command, stream output into `.drill/<task>/logs/`, hash the log, record the exit code **and the commit it ran on**. This is the only way to produce a test proof. |
 | `drill_record` | record non-command evidence: locate/blast/edge/review/pr/note |
 | `drill_gate` | which gates hold, which are open, and what the next step is |
@@ -78,6 +80,10 @@ Every key has a schema default; override by re-stating the row's whole config in
 | `defaultRole` | `drill-auditor` | Role id `drill_review` audits with. |
 | `maxReviewToolCalls` | `40` | Fallback budget when the role sets none; `0` disables the cap. Exceeding it aborts the child and records FAIL. |
 | `runTimeoutMs` | `900000` | Default timeout for `drill_run`. |
+| `errorMaxResolve` | `12` | Cap on frames `drill_error` resolves against the graph. |
+| `prLint` | `true` | Score the rendered PR body with the PR-craft core before recording it. |
+| `prCore` | `~/scripts/pr_craft.py` | Path to the shared PR-craft core (Kilo and Hermes use the same file). |
+| `pythonBin` | `python3` | Interpreter used to call the PR-craft core. |
 | `c2gEnabled` | `true` | Enable the code2graph-backed stage 1–2 tools. |
 | `c2gCacheDir` | `~/.cache/code2graph/projects` | c2g cache root. |
 | `sqliteBin` | `sqlite3` | sqlite3 executable used for read-only queries. |
@@ -154,6 +160,21 @@ drill_locate nextval_batch → nodedb/src/control/sequence/registry.rs:227 (nd_s
 drill_blast  catalog_err   → 40 resolved call sites, 60 transitive callers in 24 files
 ```
 
+## From a failure signal to symbols
+
+The pipeline's first stage starts from "the stack trace, error logs, input payload, and the specific function throwing the error" — not from a symbol name. `drill_error` takes the raw text and does that work:
+
+- **Parses** a Rust panic header (`panicked at path:line:col: msg`), a numbered backtrace (keeping `crate::module::fn` as a `symbol_hint`), a compiler `-->` diagnostic, a Python `File "x", line N`, and bare `file.ext:line` mentions in prose. Frames dedupe by `file:line` and cap at 40.
+- **Marks** toolchain and dependency frames (`/rustc/`, `~/.cargo/registry/`, `node_modules`, `site-packages`) as `external` instead of resolving or dropping them, so the reader can see why nothing was resolved there.
+- **Resolves** each repository frame through the same layers as `drill_locate` — per-worktree c2g cache, then the merged store — and shows both answers when the backtrace names a symbol the graph disagrees with (`→ nextval_batch [Method] (c2g-embed) (backtrace names …::allocate)`).
+- **Records** the whole chain as `locate` evidence, which is what closes the localize gate.
+
+## The PR body comes from the ledger
+
+`drill_pr` renders the body from evidence rather than from prose: the verification table is built from `test` and `hygiene` records (command, exit code, log name, commit), the changed-file list comes from `blast` records, and the Review 2 line comes from the `review` record. A body without a red proof says so in a blockquote instead of implying one.
+
+It is then scored by the **existing** PR-craft core (`~/scripts/pr_craft.py lint-desc`, shared with the Kilo and Hermes plugins — one logic core, no drift), and `pr` evidence is recorded **only when the lint reports no blockers**. A blocked body is still written to disk so the author can fix it, while the `pr` gate stays open.
+
 ## Cache and expiry
 
 Everything the plugin can rebuild lives under one root — `~/.cache/dsh-drill` — and never under `/tmp`, which the host may wipe between sessions:
@@ -186,6 +207,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 - **Evidence is bound to a commit** — `drill_run` records `head` + `branch`; `drill_review` records `head`. The `review` gate reopens when HEAD moved after the review, and the report names the commit evidence belongs to (or lists the commits it spans).
 - **`lib/git.js`** — read-only git queries (`rev-parse HEAD`, branch, `diff --name-only`) that answer null/empty outside a repository instead of throwing.
 - **`drill_search` + `lib/search.js`** — tgrep/rg text search as the honest fallback for stages 1–2, with engine auto-selection and text-level labelling.
+- **`drill_error` + `drill_pr`** — the drill now starts from the failure signal (frames resolved to symbols, toolchain frames marked external) and ends with a PR body rendered from the ledger and scored by the shared PR-craft core, recorded only when the lint is clean.
 - **merged c2g store as the second resolution layer** — `~/Embed/c2g/graph_index.sqlite` answers for every worktree of a repository through a verified shard-path map, so a missing per-worktree cache no longer costs the drill its resolved call graph (it previously fell straight to text search). The store's build time is carried into every record it produces.
 - **`drill_cache` + one expiring cache root** — discovery results and indexes share `~/.cache/dsh-drill`, the TTL is idle-based with a week's default, stale entries are dropped on read (a database that vanished, or an entry recorded before coverage required a snapshot), and `drill_cache status|prune|clear` makes the whole thing inspectable. c2g discovery also stops re-probing every project directory with a sqlite3 process on each call.
 - **`drill_index` + out-of-tree indexes** — `--index-path` support keeps the trigram index in `~/.cache/tgrep-index/`, so coverage is added without dirtying a worktree; `drill_start` names the engine that will answer; c2g discovery now picks the **most specific** matching cache root (with an active snapshot preferred), so a stale cache indexed at a parent directory cannot shadow the real one.
@@ -193,11 +215,13 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 67 tests
+npm test        # node --test test/*.test.js — 83 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts
 - git/role: real repositories for `headSha`/`branchName`/`diffFiles` (including the non-repo path); frontmatter parsing, project→user→bundled precedence, tool-filter expansion, budget reading
+- errors: panic headers, numbered backtraces with symbol hints, compiler diagnostics, tracebacks and bare mentions; external marking; dedupe and capping; message extraction
+- pr: body rendering from the ledger (including the missing-red warning), blocker surfacing from a core, a crashing core, and a run against the real `pr_craft.py`
 - embed store: manifest reading, shard↔worktree path mapping both ways (round trip, overrides, unconfirmed paths), definition/caller/callee/impact/dependent queries over `links` with a relation filter, and a false `isUsable` for a non-database
 - cache: TTL by idleness with touch-extends-life, prune protecting the keep list, size accounting, discovery cache hit/miss/expiry/forget, an entry without a snapshot never being served, and index pruning that keeps roots in use
 - search: binary resolution, engine auto-selection against an indexed vs unindexed root, out-of-tree index build/read-back/root matching (including that no `.tgrep` appears inside the repo), ripgrep/tgrep JSON parsing, definition-shaped patterns, miss-vs-failure exit codes, unavailable-engine reporting

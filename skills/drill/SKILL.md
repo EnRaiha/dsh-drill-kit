@@ -21,13 +21,13 @@ Kalau kerja itu penerokaan atau spike, **jangan** guna drill — tak ada gate ya
 
 | # | Fasa | Rekod yang wajib | Tool |
 |---|---|---|---|
-| 1 | **Localize** — cari tapak sebenar dari stack trace/log | `drill_record kind=locate` dengan `files` (path:line) | `drill_locate` (c2g → tgrep/rg fallback) + `drill_search` |
+| 1 | **Localize** — cari tapak sebenar dari stack trace/log | `drill_record kind=locate` dengan `files` (path:line) | **`drill_error`** (signal → frame → symbol) · `drill_locate` · `drill_search` |
 | 2 | **Blast radius** — pemanggil, callee, jenis terjejas | `drill_record kind=blast` dengan `files`/`symbols` | `drill_blast` (symbol) + `drill_diff` (fail berubah + dependent) |
 | 3 | **Edge cases** — invarian yang mesti gagal | `drill_record kind=edge` dengan `text` | fikir, senaraikan (checklist dari `drill_diff` sebagai input) |
 | 4 | **Patch** — red dulu, baru hijau | `drill_run arm=base` (mesti **exit ≠ 0**), kemudian `drill_run arm=fix` (mesti exit 0) | `nodedb-cargo.sh` |
 | 5 | **Hygiene** — fmt, clippy, preflight | `drill_run kind=hygiene` exit 0 | `nodedb-preflight.sh` |
 | 6 | **Review 2** — auditor segar, read-only | `drill_review` (role `drill-auditor`) | subagent + role file |
-| 7 | **PR** — badan PR ditulis, baru push | `drill_record kind=pr bodyPath=…` | `gh` |
+| 7 | **PR** — badan PR dijana dari ledger, lint bersih, baru push | `drill_record kind=pr bodyPath=…` | **`drill_pr`** (jana + lint `pr_craft.py`) · `gh` |
 
 ## Perintah asas
 
@@ -48,9 +48,11 @@ drill_report  task=issue296            # tulis .drill/issue296/report.md
 3. **Bukti diikat pada commit.** `drill_run` dan `drill_review` merekod `head` (SHA). Kalau HEAD bergerak selepas review, gate `review` **terbuka semula** — review semula commit yang kau nak push.
 4. **Jangan lapor siap semasa gate terbuka.** Panggil `drill_gate`; kalau `ready=false`, sebut gate mana yang tinggal, jangan ganti dengan ayat "should work".
 5. **Review 2 dalam sesi segar, ikut role file.** Auditor tak boleh jadi penulis kod. `drill_review` baca role `drill-auditor` (project `.dsh/roles` → `~/.dsh/roles` → bundled), jadi persona, tool policy (read-only) dan budget datang dari fail, bukan dari ingatan.
-6. **Satu issue satu PR.** Badan PR: defect + fix + cara uji + bukti regresi. `Fixes #<n>`. Nombor issue tak muncul dalam kod atau mesej commit.
+6. **Mula dari signal, bukan tekaan.** Ada panic/backtrace/log? `drill_error` dulu — ia resolve setiap frame jadi symbol. Frame `/rustc/`, `~/.cargo/registry/` ditanda *external*, bukan direka.
+7. **Badan PR dari bukti.** `drill_pr` jana badan dari ledger dan lint guna `~/scripts/pr_craft.py`; gate `pr` cuma tertutup bila lint takde blocker. Jangan tulis badan PR dari ingatan.
+8. **Satu issue satu PR.** Badan PR: defect + fix + cara uji + bukti regresi. `Fixes #<n>`. Nombor issue tak muncul dalam kod atau mesej commit.
 7. **Fallback dilabel ikut lapisan.** Kalau cache c2g per-worktree tiada, plugin guna **merged store `~/Embed/c2g/graph_index.sqlite`** — itu graf sebenar (link resolved), tapi **snapshot**, bukan HEAD worktree kau; rekod bawa masa build dia. Lepas tu baru tgrep/rg: itu *occurrence*, bukan call site — jangan dakwa "caller" dari hasil teks.
-8. **Env repo dihormati.** Guna `~/scripts/nodedb-cargo.sh <worktree> …` (target per-worktree, sccache, `RUST_MIN_STACK`), bukan `cargo` kosong.
+9. **Env repo dihormati.** Guna `~/scripts/nodedb-cargo.sh <worktree> …` (target per-worktree, sccache, `RUST_MIN_STACK`), bukan `cargo` kosong.
 
 ## Bentuk laporan
 

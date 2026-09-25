@@ -27,6 +27,8 @@ import { branchName, diffFiles, headSha } from './lib/git.js'
 import { resolveRole, roleBudget, roleToolFilter } from './lib/role.js'
 import { DEFAULT_INDEX_DIR, definitionPattern, indexFor, indexRoot, indexesSize, legacyIndexDir, pruneIndexes, resolveBin, resolveEngine, searchText } from './lib/search.js'
 import { cacheRoot, drop, readCache, sizeOf } from './lib/cache.js'
+import { MAX_FRAMES, describeFrames, parseFrames } from './lib/errors.js'
+import { lintPrBody, renderPrBody } from './lib/pr.js'
 import {
   DEFAULT_EMBED_STORE,
   callers as embedCallers,
@@ -37,6 +39,7 @@ import {
   isUsable as embedUsable,
   locate as embedLocate,
   openStore as openEmbedStore,
+  symbolAtLine as embedSymbolAtLine,
   storeLabel as embedStoreLabel,
 } from './lib/embed.js'
 
@@ -65,6 +68,10 @@ export const Config = z.object({
   autoIndex: z.boolean().default(false),
   cacheDir: z.string().default(''),
   cacheTtlDays: z.number().min(0).step(1).default(7),
+  prLint: z.boolean().default(true),
+  prCore: z.string().default(''),
+  pythonBin: z.string().default('python3'),
+  errorMaxResolve: z.number().min(1).max(40).step(1).default(12),
   embedEnabled: z.boolean().default(true),
   embedStore: z.string().default(''),
   embedRepoMap: z.string().default(''),
@@ -784,6 +791,219 @@ export function apply(ctx, config) {
       }
       appendEntry(paths, { task, kind: 'note', stage: 'localize', text: `drill_cache ${args.action}`, note: `${result.indexEntries.length} indexes, ${(result.indexBytes / 1048576).toFixed(1)} MB${removed.length > 0 ? `, removed ${removed.length}` : ''}` })
       return result
+    },
+  })
+
+  tool({
+    name: 'drill_error',
+    description: 'Stage 1 from a failure signal: parse a panic, backtrace, compiler diagnostic or traceback into file:line frames, resolve each frame to its symbol (per-worktree c2g cache, then the merged c2g store), and record the chain as `locate` evidence. Use this before guessing where a bug lives.',
+    parameters: {
+      error: { type: 'string', required: true, description: 'The raw failure text: panic, backtrace, compiler diagnostics, or a log excerpt.' },
+      repo: { type: 'string', description: 'Repository or worktree to resolve against; defaults to the task repository.' },
+      task: { type: 'string', description: 'Task id; defaults to the active drill task.' },
+      record: { type: 'boolean', description: 'Record the frames as `locate` evidence (default true).' },
+      maxResolve: { type: 'integer', description: 'Cap on frames resolved against the graph; defaults to the row configuration.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          message: { type: 'string' },
+          frames: { type: 'array', items: { type: 'string' } },
+          resolved: { type: 'integer' },
+          unresolved: { type: 'integer' },
+          external: { type: 'integer' },
+          recorded: { type: 'boolean' },
+          sources: { type: 'string' },
+          gates: { type: 'array', items: { type: 'string' } },
+          next: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: [
+          value.message === undefined ? 'no message extracted' : `message: ${value.message}`,
+          `frames: ${value.frames.length} (${value.resolved} resolved, ${value.unresolved} unresolved, ${value.external} external)`,
+          value.frames.slice(0, 15).join('\n'),
+          `resolved via: ${value.sources}${value.recorded ? ' · recorded as locate evidence' : ''}`,
+          `gates: ${value.gates.join(' ')}`,
+          `next: ${value.next}`,
+        ].join('\n'),
+      }],
+    },
+    async execute(args, exec) {
+      const { cwd, stateRoot } = roots(exec, config)
+      const task = resolveTask(args, stateRoot)
+      const paths = taskPaths(stateRoot, task)
+      const active = readActive(stateRoot) ?? {}
+      const repo = args.repo !== undefined ? resolve(cwd, args.repo) : (active.repo !== undefined ? resolve(String(active.repo)) : cwd)
+      const db = c2gDb(repo, config)
+      const store = embedStoreFor(config)
+      const overrides = embedOverrides(config)
+
+      const parsed = parseFrames(args.error)
+      const limit = Math.min(args.maxResolve ?? config.errorMaxResolve, MAX_FRAMES)
+      let attempts = 0
+      const sources = new Set()
+      const frames = parsed.frames.map(frame => {
+        if (frame.external) return { ...frame, source: 'external', symbol: null }
+        if (attempts >= limit) return { ...frame, source: 'not-attempted', symbol: null }
+        attempts += 1
+        if (db !== null) {
+          try {
+            const hit = locateByFrame(db, frame.file, frame.line, config.sqliteBin)
+            if (hit) {
+              sources.add('c2g')
+              return { ...frame, source: 'c2g', symbol: hit }
+            }
+          } catch {
+            // A cache that cannot answer this frame simply falls through.
+          }
+        }
+        if (store !== null) {
+          try {
+            const hit = embedSymbolAtLine(store.path, repo, frame.file, frame.line, { overrides }, config.sqliteBin)
+            if (hit) {
+              sources.add('c2g-embed')
+              return { ...frame, source: 'c2g-embed', symbol: hit }
+            }
+          } catch {
+            // Same: the merged store may not cover this frame.
+          }
+        }
+        return { ...frame, source: null, symbol: null }
+      })
+
+      const rendered = frames.map(frame => {
+        const where = `${frame.file}:${frame.line}${frame.column === null ? '' : `:${frame.column}`}`
+        if (frame.external) return `${where} (external)`
+        if (frame.symbol !== null) {
+          // When the backtrace names a symbol the graph disagrees with, show both:
+          // the graph answer is a position lookup, the hint is what the runtime called.
+          const hint = frame.symbolHint !== undefined && !frame.symbolHint.endsWith(`::${frame.symbol.name}`) && frame.symbolHint !== frame.symbol.name
+            ? ` (backtrace names ${frame.symbolHint})`
+            : ''
+          return `${where} → ${frame.symbol.name} [${frame.symbol.kind}] (${frame.source})${hint}`
+        }
+        return `${where} (unresolved${frame.symbolHint === undefined ? '' : `; backtrace hint ${frame.symbolHint}`})`
+      })
+      const resolved = frames.filter(f => f.symbol !== null).length
+      const external = frames.filter(f => f.external).length
+      const recorded = args.record !== false && parsed.frames.length > 0
+
+      if (recorded) {
+        appendEntry(paths, {
+          task,
+          kind: 'locate',
+          stage: 'localize',
+          cmd: `drill_error frames=${frames.length}`,
+          files: frames.filter(f => !f.external).map(f => `${f.file}:${f.line}`),
+          text: [parsed.message ?? 'no message extracted', ...rendered.slice(0, 8)].join(' | ').slice(0, 500),
+          note: `${describeFrames(frames)}; resolved ${resolved} via ${[...sources].join('+') || 'nothing'}`,
+        })
+      }
+      const { evaluation } = loadTask(stateRoot, task)
+      const summary = summarize(evaluation)
+      return {
+        ...(parsed.message === null ? {} : { message: parsed.message }),
+        frames: rendered,
+        resolved,
+        unresolved: frames.filter(f => f.symbol === null && !f.external).length,
+        external,
+        recorded,
+        sources: [...sources].join('+') || (external === frames.length ? 'all frames external' : 'none'),
+        gates: summary.gates,
+        next: summary.next,
+      }
+    },
+  })
+
+  tool({
+    name: 'drill_pr',
+    description: 'Stage 7 — render the pull-request body from the ledger (why, changed files, red/green/preflight evidence with exit codes and commits, Review 2 verdict, gate table), write it to a file, score it with the PR-craft core, and record it as `pr` evidence when the lint has no blockers.',
+    parameters: {
+      title: { type: 'string', required: true, description: 'PR subject line (conventional-commit style reads best).' },
+      why: { type: 'string', description: 'One paragraph on why the change exists; defaults to an issue reference sentence.' },
+      issue: { type: 'string', description: 'Issue number the PR closes; defaults to the task metadata.' },
+      out: { type: 'string', description: 'Output path; defaults to <state>/PR_BODY.md.' },
+      task: { type: 'string', description: 'Task id; defaults to the active drill task.' },
+      record: { type: 'boolean', description: 'Record the body as `pr` evidence (default true, and only when the lint has no blockers).' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          bodyPath: { type: 'string', required: true },
+          title: { type: 'string', required: true },
+          lintAvailable: { type: 'boolean' },
+          lintOk: { type: 'boolean' },
+          lintScore: { type: 'integer' },
+          lintVerdict: { type: 'string' },
+          blockers: { type: 'array', items: { type: 'string' } },
+          good: { type: 'array', items: { type: 'string' } },
+          recorded: { type: 'boolean' },
+          gates: { type: 'array', items: { type: 'string' } },
+          next: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: [
+          `PR body: ${value.bodyPath}`,
+          value.lintAvailable
+            ? `lint: ${value.lintVerdict}${value.lintScore === null ? '' : ` (score ${value.lintScore})`}${value.lintOk ? '' : ''}`
+            : 'lint: pr-craft core not available',
+          value.blockers.length > 0 ? `blockers:\n- ${value.blockers.join('\n- ')}` : null,
+          value.good.length > 0 ? `good: ${value.good.slice(0, 4).join('; ')}` : null,
+          value.recorded ? 'recorded as pr evidence' : 'not recorded (fix the blockers first, or pass record=false to see the body only)',
+          `gates: ${value.gates.join(' ')}`,
+          `next: ${value.next}`,
+        ].filter(Boolean).join('\n'),
+      }],
+    },
+    async execute(args, exec) {
+      const { stateRoot } = roots(exec, config)
+      const task = resolveTask(args, stateRoot)
+      const paths = taskPaths(stateRoot, task)
+      const active = readActive(stateRoot) ?? {}
+      const entries = readLedger(paths)
+      const issue = args.issue ?? (active.issue === null || active.issue === undefined ? undefined : String(active.issue))
+
+      const body = renderPrBody(task, entries, {
+        title: args.title,
+        ...(args.why !== undefined ? { why: args.why } : {}),
+        ...(issue !== undefined ? { issue } : {}),
+      })
+      const out = args.out !== undefined ? resolve(args.out) : join(paths.dir, 'PR_BODY.md')
+      mkdirSync(paths.dir, { recursive: true })
+      writeFileSync(out, body, 'utf8')
+
+      const lint = config.prLint
+        ? lintPrBody(body, { core: config.prCore && config.prCore.length > 0 ? config.prCore : undefined, pythonBin: config.pythonBin })
+        : { available: false, ok: null, score: null, verdict: 'lint disabled', blockers: [], good: [], error: null }
+      const clean = !lint.available || lint.blockers.length === 0
+      const recorded = args.record !== false && clean
+      if (recorded) {
+        appendEntry(paths, { task, kind: 'pr', stage: 'pr', bodyPath: out, text: args.title, ...(lint.available ? { note: `lint score ${lint.score ?? '?'} — ${lint.verdict}` } : {}) })
+      }
+
+      const { evaluation } = loadTask(stateRoot, task)
+      const summary = summarize(evaluation)
+      return {
+        bodyPath: out,
+        title: args.title,
+        lintAvailable: lint.available,
+        lintOk: lint.ok === true,
+        ...(lint.score === null ? {} : { lintScore: lint.score }),
+        lintVerdict: lint.error === null ? lint.verdict : `${lint.verdict} (${lint.error})`,
+        blockers: lint.blockers,
+        good: lint.good,
+        recorded,
+        gates: summary.gates,
+        next: summary.next,
+      }
     },
   })
 
