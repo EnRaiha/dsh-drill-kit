@@ -1,6 +1,6 @@
 # The Drill — full document: the bug-fixing pipeline and the plugin
 
-*2026-09-25 · EnRaiha · one issue → one branch → one evidence chain → one reviewed PR · the `dsh-drill` DSH plugin (v0.8.4) and its full specification, including the defects the two reviews found and fixed*
+*2026-09-25 · EnRaiha · one issue → one branch → one evidence chain → one reviewed PR · the `dsh-drill` DSH plugin (v0.8.5) and its full specification, including the defects the two reviews found and fixed*
 
 ---
 
@@ -16,7 +16,7 @@ Today the drill exists in three places:
 
 | Layer | Where | State |
 |---|---|---|
-| Full plugin | `~/projects/dsh-drill` (DSH, v0.8.4) | 16 tools, 104 tests, loads on DSH `0.1.6-alpha.2` |
+| Full plugin | `~/projects/dsh-drill` (DSH, v0.8.5) | 16 tools, 106 tests, loads on DSH `0.1.6-alpha.2` |
 | Shared c2g core | `~/scripts/c2g_tools.py` v1.1.0 + Kilo/Hermes frontends | `c2g_error` / `c2g_frame` on all three surfaces |
 | Discipline + PR + agents | Kilo/Hermes `pr-craft`, `parity-auditor`, `test-runner`, `ci-runner`, `codetrack` | reviewed, no enforcement layer |
 
@@ -160,7 +160,7 @@ Stage 1–2 answers come from three layers, in order, and every record names whi
 - Symbol names repeat across crates — disambiguate with the stack frame's file.
 - The cache path is a project key, **not** `sha256(abs path)`: `project_key` is a 32-byte BLOB (blake3 over the canonical root — upstream `cli/src/cache/location.rs:24-36`) and the directory name is its `lower(hex(...))`. It is still a deterministic hash of the root, just not the one you would guess, so discover the cache by matching `meta.canonical_root` rather than by computing a path.
 - A cache without an active scope snapshot cannot answer; it must not be treated as coverage (a home-directory cache otherwise claims every repo).
-- Upstream keys the active slot by **`(resolver_tier, completeness)` with `completeness IN (0,1)`** (`cli/src/cache/schema.rs`), so one tier can hold a partial *and* a complete snapshot at once. A bare `(SELECT snapshot_id FROM active_snapshots WHERE resolver_tier='scope')` is therefore ambiguous: SQLite takes an arbitrary row, and two queries in the same tool call can read different snapshots and join symbols from one to edges of the other. `v0.8.4` narrows it to `… ORDER BY completeness DESC LIMIT 1` — complete graph first, partial only when that is all the cache has — and every query shares that fragment. When a partial snapshot is what answered, the record says `partial scope snapshot, callers may be under-reported` rather than presenting an incomplete graph as the graph.
+- Upstream keys the active slot by **`(resolver_tier, completeness)` with `completeness IN (0,1)`** (`cli/src/cache/schema.rs`), so one tier can hold a partial *and* a complete snapshot at once. A bare `(SELECT snapshot_id FROM active_snapshots WHERE resolver_tier='scope')` is therefore ambiguous: SQLite takes an arbitrary row, and two queries in the same tool call can read different snapshots and join symbols from one to edges of the other. `v0.8.5` narrows it to `… ORDER BY completeness DESC LIMIT 1` — complete graph first, partial only when that is all the cache has — and every query shares that fragment. When a partial snapshot is what answered, the record says `partial scope snapshot, callers may be under-reported` rather than presenting an incomplete graph as the graph.
 - The c2g **binary** hung >60 s on `nodedb` and `nodedb-305` during this work; the SQLite cache answered in milliseconds. Cache first, binary last.
 - The cache carries a **schema version** (`PRAGMA user_version`, `SCHEMA_VERSION: i64 = 3` in the upstream `cli/src/cache/schema.rs`). Our queries read specific tables (`graph_symbols`, `graph_edges`, `active_snapshots`), so a bump there means the columns we read may have moved. Every c2g-backed record shows `c2g cache schema v3`, and a mismatch prints a warning *inside the note* rather than failing the call — the graph answer is still recorded, but it is visibly suspect, and the version is re-read on each cache hit so drift cannot hide behind the TTL.
 
@@ -184,7 +184,7 @@ Those last two were missing until the 2026-09-25 end-to-end review: they are 15.
 
 ## 5. Reference implementation
 
-### 5.1 DSH plugin — `dsh-drill` v0.8.4 (16 tools)
+### 5.1 DSH plugin — `dsh-drill` v0.8.5 (16 tools)
 
 Every tool states what it writes, because whether a gate closes silently is the difference between a drill and a diary. `—` = writes no ledger record.
 
@@ -424,7 +424,7 @@ A reviewer working from the complete source bundle (`~/projects/DRILL-PLUGIN-SOU
 
 Three tests were added with the fixes (one each, in `test/integration.test.js`): rendering a PR body with `active.json` removed; asserting the `session/event` listener exists during the review and is gone after it (twice, so they cannot accumulate); and a budget test whose fake reviewer **drives 50 real `tool/call` events through the plugin's own listener** and reports FAIL only if the plugin aborted its signal — with the `maxToolCalls: 0` role the review stays PASS and the artifact reads `toolCalls: 50/unlimited`, while the role with no budget key falls back to `maxReviewToolCalls: 7`, is aborted at the cap, records `toolCalls: 50/7`, and leaves the `review` gate open. That is the predicate under test, not the string it prints. Suite at that revision: **100 tests, 0 failures** (103 after §7.2.8).
 
-#### 7.2.8 The c2g scope subquery could read two snapshots at once (v0.8.4)
+#### 7.2.8 The c2g scope subquery could read two snapshots at once (v0.8.5)
 
 The same review that produced §7.2.7 flagged the remaining item as "cheap insurance": add `LIMIT 1` to the `SCOPE` subquery, matching what `discoverDb` already did. Checking upstream turned it from insurance into a real correctness fix.
 
@@ -447,7 +447,7 @@ The complete snapshot wins; a partial one is used only when it is all the cache 
 
 Three tests: a two-slot cache resolves to the complete snapshot and the partial snapshot's symbols never appear in an answer (with an edge join proving symbols and edges come from the same snapshot); a partial-only cache still answers and reports `completeness: 0`; and `drill_locate` on a partial-only cache records the hit **and** the warning in its note.
 
-#### 7.2.9 The published package could not lint a PR body (v0.8.4)
+#### 7.2.9 The published package could not lint a PR body (v0.8.5)
 
 `drill_pr` scores the body it renders with the PR-craft core, resolved from `~/scripts/pr_craft.py`. That is correct on the machine the plugin was written on and wrong for everyone else: an npm install has no `~/scripts`, so `lintPrBody` would report `available: false`, `clean` would be `true` (a missing core is deliberately not a blocker), and the `pr` record would be written for a body **nobody scored** — the same shape as §7.2.5, arriving through packaging instead of logic.
 
@@ -455,7 +455,7 @@ Three tests: a two-slot cache resolves to the complete snapshot and the partial 
 
 The tarball is 20 files / 71.7 KB: `index.js`, the twelve `lib/*.js`, `skills/`, `roles/`, `cordis.patch.yml`, `core/pr_craft.py`, README, LICENSE, package.json. Tests, docs and `tools/` stay out of it.
 
-#### 7.2.10 The published package warned on every install (v0.8.4)
+#### 7.2.10 The published package warned on every install (v0.8.5)
 
 The first npm publish verified the important thing — 20 files, `core/pr_craft.py` included, installable by bare name from the registry — and surfaced a packaging defect that only a real install shows:
 
@@ -466,6 +466,20 @@ The first npm publish verified the important thing — 20 files, `core/pr_craft.
 Nothing was actually missing: the host supplies those modules through the profile's own resolution, and the public npm versions of `dsh-tools`/`dsh-llm` exist. But the plugin declared them as **required** peers, so every profile install printed a warning for packages the user must *not* install manually, and `schemastery` — a runtime validator, which DSH's own cookbook says belongs in `dependencies` — was declared as a peer too.
 
 **Fix.** `@deepseek-ai/schemastery` moves to `dependencies` (`^3.18.0`, installed with the plugin, so validation cannot depend on the host's layout). `dsh-tools`, `dsh-llm` and `dsh-subagent` stay declared but become **optional** peers: the runtime provides them, a missing host fails loudly at import, and the install is quiet. Verified by installing the local package into a throwaway profile — no peer output at all.
+
+#### 7.2.11 A configured-but-missing PR core recorded an unlinted body (v0.8.5)
+
+`drill_pr` scores the body with the PR-craft core and records `pr` evidence only when the lint ran clean. The judgement was `clean = !lint.available || (blockers === 0 && error === null)`, and `lintPrBody` answers `available: false` both for "lint disabled" **and** for "the core at this path is not there". So `prCore: /wrong/path` did not fail — it recorded a `pr` record with no note, indistinguishable in the ledger from a body that passed the lint.
+
+**Fix.** A non-empty `prCore` that does not exist is a configuration error: `drill_pr` refuses and says which path and how to fix it (`unset prCore to use the bundled core`). And when the lint genuinely did not run — `prLint: false`, or a core missing from every resolution layer — the record now carries that fact: `recorded without PR-craft lint (lint disabled)`. An unscored body never looks scored.
+
+Two integration tests: a missing configured core is refused with no `pr` record written, and an unconfigured run lints with the core that ships in the package.
+
+#### 7.2.12 A test that only passed on the machine that wrote it (v0.8.5)
+
+The role-resolution test asserted `roleSource === 'bundled'`. Role resolution is project → user → bundled, so the moment a user-level role existed — `~/.dsh/roles/drill-auditor.md`, written by `drill_setup` on any machine that ran it — the same code returned `user` and the suite went red for a reason that said nothing about the code.
+
+**Fix.** The test points `DSH_HOME` at an empty directory for its duration and restores it afterwards, so it asserts the bundled fallback deterministically. Precedence itself stays covered by `test/git-role.test.js`, which builds all three levels in a temp tree.
 
 ---
 
@@ -504,8 +518,8 @@ Two design questions were *decided*, not verified, and are flagged as such in th
 
 ### 7.6 What changed in this revision
 
-- **`~/projects/dsh-drill`** — v0.8.0: `lib/gates.js` (commit binding for `review`/`pr`), `lib/ledger.js` (log provenance, arm, hygiene log, `logs` path), `lib/runner.js` (signal exit codes), `lib/git.js` (fallback flag), `lib/errors.js` (relative toolchain prefixes), `index.js` (`drill_record` head/branch, `drill_diff` fallback labelling, `drill_pr` lint-crash, `drill_locate` store-miss, `drill_run` signal, `requireLog` config, note fix), README, plus new cases in `test/{core,errors,integration}.test.js`: **88 → 97 tests at v0.8.0** (100 at v0.8.1, 103 at v0.8.4 — below).
-- **`~/projects/DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`** (this document) — versions and counts reconciled, §3.1/§3.2/§4/§5.1/§5.2/§8 and Appendices A–C corrected, the review folded in as §7, and a risks register (§8) recording each defect with the version that fixed it. v0.8.1 adds the three fixes from the source-bundle review (§7.2.7): `drill_pr`'s unbound `cwd`, `drill_review`'s leaked session listener, and the role budget where `0` meant "no cap" but was overridden. v0.8.4 adds the c2g snapshot-selection fix from the same review's second item (§7.2.8). **104 tests** now (88 → 97 → 100 → 103 across the three revisions). The two earlier files it consolidates remain on disk as source records.
+- **`~/projects/dsh-drill`** — v0.8.0: `lib/gates.js` (commit binding for `review`/`pr`), `lib/ledger.js` (log provenance, arm, hygiene log, `logs` path), `lib/runner.js` (signal exit codes), `lib/git.js` (fallback flag), `lib/errors.js` (relative toolchain prefixes), `index.js` (`drill_record` head/branch, `drill_diff` fallback labelling, `drill_pr` lint-crash, `drill_locate` store-miss, `drill_run` signal, `requireLog` config, note fix), README, plus new cases in `test/{core,errors,integration}.test.js`: **88 → 97 tests at v0.8.0** (100 at v0.8.1, 103 at v0.8.5 — below).
+- **`~/projects/DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`** (this document) — versions and counts reconciled, §3.1/§3.2/§4/§5.1/§5.2/§8 and Appendices A–C corrected, the review folded in as §7, and a risks register (§8) recording each defect with the version that fixed it. v0.8.1 adds the three fixes from the source-bundle review (§7.2.7): `drill_pr`'s unbound `cwd`, `drill_review`'s leaked session listener, and the role budget where `0` meant "no cap" but was overridden. v0.8.5 adds the c2g snapshot-selection fix from the same review's second item (§7.2.8). **106 tests** now (88 → 97 → 100 → 103 across the three revisions). The two earlier files it consolidates remain on disk as source records.
 - Nothing was pushed; all commits are local, as instructed.
 
 ---
@@ -526,9 +540,11 @@ Two design questions were *decided*, not verified, and are flagged as such in th
 | A tool that used a variable it never bound | §7.2.7 — `drill_pr` destructured `stateRoot` but used `cwd` on the no-metadata path, so rendering a body for a task with no `active.json` crashed with a `ReferenceError` | v0.8.1: `cwd` is destructured; a test strips `active.json` and renders a body |
 | A listener that outlived its review | §7.2.7 — `drill_review` never disposed its global `session/event` listener, so each review leaked a closure holding the child run, controller and budget | v0.8.1: the disposer is captured and called in `finally`; a test asserts registration during the run and absence after, twice |
 | A documented "no cap" that silently capped | §7.2.7 — a role with `maxToolCalls: 0` fell back to `maxReviewToolCalls` although `roleBudget`, the abort condition, the artifact line and the README all read `0` as unlimited | v0.8.1: only a role with no budget key uses the fallback; two fixture roles pin both halves |
-| A graph query that reads two snapshots at once | §7.2.8 — `active_snapshots` is keyed by `(tier, completeness)`, so a partial and a complete snapshot coexist; the `SCOPE` subquery had no `LIMIT`/`ORDER BY`, letting a scalar subquery pick arbitrarily and two queries in one call disagree | v0.8.4: `ORDER BY completeness DESC LIMIT 1` in every query and in the coverage probe, `completeness` carried into the record, partial snapshots labelled `callers may be under-reported` |
-| A published install that silently skips the PR lint | §7.2.9 — the PR-craft core was resolved from `~/scripts/pr_craft.py` only, so an npm install rendered bodies with `available: false` and recorded them as clean | v0.8.4: the core ships in the package and resolves in-package first (`PR_CRAFT_CORE` → bundled → `$HOME`), verified from an extracted tarball |
-| An install that warns about packages the user must not install | §7.2.10 — the first publish declared host-provided modules as required peers, so every profile install printed `missing peer` for them, and the runtime validator `schemastery` was a peer instead of a dependency | v0.8.4: `schemastery` ships as a dependency, the host modules are optional peers; the install is quiet |
+| A graph query that reads two snapshots at once | §7.2.8 — `active_snapshots` is keyed by `(tier, completeness)`, so a partial and a complete snapshot coexist; the `SCOPE` subquery had no `LIMIT`/`ORDER BY`, letting a scalar subquery pick arbitrarily and two queries in one call disagree | v0.8.5: `ORDER BY completeness DESC LIMIT 1` in every query and in the coverage probe, `completeness` carried into the record, partial snapshots labelled `callers may be under-reported` |
+| A published install that silently skips the PR lint | §7.2.9 — the PR-craft core was resolved from `~/scripts/pr_craft.py` only, so an npm install rendered bodies with `available: false` and recorded them as clean | v0.8.5: the core ships in the package and resolves in-package first (`PR_CRAFT_CORE` → bundled → `$HOME`), verified from an extracted tarball |
+| An install that warns about packages the user must not install | §7.2.10 — the first publish declared host-provided modules as required peers, so every profile install printed `missing peer` for them, and the runtime validator `schemastery` was a peer instead of a dependency | v0.8.5: `schemastery` ships as a dependency, the host modules are optional peers; the install is quiet |
+| A PR body recorded as if it had been scored | §7.2.11 — `prCore` pointing at a missing file made the lint report `available: false`, which read as "nothing to lint", so `drill_pr` recorded the body with no note | v0.8.5: a configured-but-missing core is refused; a record made without lint says so |
+| A test that passed only on the author's machine | §7.2.12 — the role test asserted `bundled` while a user-level `~/.dsh/roles/drill-auditor.md` legitimately wins | v0.8.5: the test isolates `DSH_HOME`; precedence is covered separately in `git-role.test.js` |
 | The PR body outliving its commit | `drill_pr` recorded no `head` in v0.7.0 | `pr` now records `head`, and the gate reopens when it is not the green proof's commit |
 | A gate that closes on a record with no commit at all | §7.2.1 — the 2026-09-25 end-to-end review: the `review`/`pr` staleness test was skipped when the record carried no `head` (`last?.head !== undefined && …`), and `drill_record` had no `head` argument — so a hand-written `review` with `PASS`/0 blockers closed a required gate unbound | v0.8.0: a missing `head` is as stale as a wrong one, and `drill_record` takes an explicit `head` |
 | A hand-written "proof" | §7.2.2 — the same review: `drill_record kind=test arm=fix exit=0 log=<any readable file>` closed `green` — the write-time check only proved the file existed | v0.8.0: a `test`/`hygiene` log must sit in the task's own `logs/` directory, `test` records need an `arm`, `hygiene` needs a log; the residual trust boundary is documented in §3.1 |
@@ -561,7 +577,7 @@ Two design questions were *decided*, not verified, and are flagged as such in th
 ### B. Verification commands
 
 ```bash
-cd ~/projects/dsh-drill && npm test           # 104 tests: core, c2g SQL, cache, embed, search, git/role, errors, pr, integration
+cd ~/projects/dsh-drill && npm test           # 106 tests: core, c2g SQL, cache, embed, search, git/role, errors, pr, integration
 node --test test/integration.test.js          # the end-to-end drill through the real DSH tool runtime
 python3 ~/scripts/pr_craft.py selftest        # 10-case PR-lint regression
 python3 ~/scripts/c2g_tools.py run --stdin <<< '{"tool":"error","text":"panicked at nodedb/src/control/sequence/registry.rs:231:13:\nboom","root":"$PWD"}'
@@ -575,7 +591,7 @@ cd ~/projects/deepseek-harness && node apps/cli/lib/bin.js drill --port 3999 --n
 
 | Path | What |
 |---|---|
-| `~/projects/dsh-drill/` | the plugin, its skill, role, README, 104 tests |
+| `~/projects/dsh-drill/` | the plugin, its skill, role, README, 106 tests |
 | `~/projects/dsh-drill/lib/{ledger,gates,errors,pr,c2g,embed,search,git,role,runner,cache,report}.js` | the logic |
 | `~/scripts/c2g_tools.py` | shared c2g core (v1.1.0) incl. `frame`/`error` |
 | `~/.kilo/plugins/c2g/server.ts`, `~/.hermes/plugins/c2g/**` | the two c2g frontends |

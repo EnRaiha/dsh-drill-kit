@@ -8,7 +8,7 @@ One repository for the whole drill: the DSH plugin that enforces it, the two sha
 
 | Path | What |
 |---|---|
-| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 104 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
+| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 106 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
 | `core/c2g_tools.py` | the c2g core (stdlib only): `frame`, `error` and the query tools — cache → merged store → binary |
 | `core/pr_craft.py` | the PR-craft core (stdlib only): `lint-desc`, `lint-comment`, `lint-diff`, `plan`, `checklist` |
 | `frontends/kilo/`, `frontends/hermes/` | thin frontends that expose the two cores as plugins in those runtimes |
@@ -26,6 +26,8 @@ One repository for the whole drill: the DSH plugin that enforces it, the two sha
 ./install.sh --profile web --uninstall
 
 curl -fsSL https://raw.githubusercontent.com/EnRaiha/dsh-drill-kit/master/install.sh \
+  | bash -s -- --profile web --dry-run      # prints every action, writes nothing
+curl -fsSL https://raw.githubusercontent.com/EnRaiha/dsh-drill-kit/master/install.sh \
   | bash -s -- --profile web --link
 ```
 
@@ -37,10 +39,10 @@ Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, 
 dsh plugin --profile <profile> add dsh-drill              # from npm
 dsh plugin --profile <profile> add dsh-drill@0.8.4        # pinned
 dsh plugin --profile <profile> add /path/to/dsh-drill-kit # local checkout
-dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.4
+dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.5
 ```
 
-The plugin imports three host modules (`@deepseek-ai/dsh-tools`, `dsh-llm`, `schemastery`). They are reachable through the profile the plugin loads into, so the first two are declared **optional** peers — a missing host fails loudly at import — and `schemastery`, a runtime validator rather than a host service, ships as a regular dependency.
+The plugin imports host modules that the DSH runtime provides (`@deepseek-ai/dsh-tools`, `dsh-llm`, `dsh-subagent`). All three are declared as **optional** peers: the host supplies them through the profile's own resolution, a missing host still fails loudly at import, and a fresh install stays quiet instead of printing `missing peer` for packages the user must not install. `@deepseek-ai/schemastery` is different — a runtime validator, not a host service — so it ships as a regular `dependencies` entry.
 
 Or by hand:
 
@@ -56,7 +58,7 @@ The plugin row is declared in `cordis.patch.yml` (`dsh.bundle.patch` in `package
 ## Run the tests
 
 ```sh
-node --test test/*.test.js           # 104 tests, 0 failures
+node --test test/*.test.js           # 106 tests, 0 failures
 node tools/build-source-bundle.mjs   # refresh docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md
 ```
 
@@ -88,7 +90,7 @@ What is *this* repository's own work: the gate implementation and ledger (`index
 
 ## Status
 
-`dsh-drill` **v0.8.4** · 16 tools · 104 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
+`dsh-drill` **v0.8.5** · 16 tools · 106 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
 
 ## Licence
 
@@ -148,7 +150,7 @@ The plugin also registers one `agent/turn-stopping` listener: while an active ta
 
 ```sh
 # from this checkout (dev): link into a profile, then boot
-dsh plugin --profile <profile> add ~/projects/dsh-drill
+dsh plugin --profile <profile> add ~/projects/dsh-drill-kit
 node apps/cli/lib/cli.js <profile> --dump-config | grep -A2 'id: drill'
 ```
 
@@ -181,8 +183,9 @@ Every key has a schema default; override by re-stating the row's whole config in
 | `maxReviewToolCalls` | `40` | Fallback budget when the role sets none; `0` disables the cap. A role's own `maxToolCalls` always wins, including `0` — v0.8.1 fixed a case where a role saying `0` was silently overridden by this fallback. Exceeding the budget aborts the child and records FAIL. |
 | `runTimeoutMs` | `900000` | Default timeout for `drill_run`. |
 | `errorMaxResolve` | `12` | Cap on frames `drill_error` resolves against the graph. |
+| `requireLog` | `true` | Refuse a `test`/`hygiene` record whose log is missing, unreadable, or outside the task's own `logs/` directory. Set `false` to accept a log path from elsewhere — the ledger then records the hash without checking where it came from. |
 | `prLint` | `true` | Score the rendered PR body with the PR-craft core before recording it. |
-| `prCore` | `~/scripts/pr_craft.py` | Path to the shared PR-craft core (Kilo and Hermes use the same file). |
+| `prCore` | `''` (auto) | Explicit path to the PR-craft core. Left empty, the plugin resolves `PR_CRAFT_CORE`, then the copy that ships with the package (`core/pr_craft.py`), then `~/scripts/pr_craft.py` — so a fresh install lints without configuring anything. A non-empty value that does not exist is refused by `drill_pr` rather than recorded unlinted. |
 | `pythonBin` | `python3` | Interpreter used to call the PR-craft core. |
 | `c2gEnabled` | `true` | Enable the code2graph-backed stage 1–2 tools. |
 | `c2gCacheDir` | `~/.cache/code2graph/projects` | c2g cache root. |
@@ -287,7 +290,7 @@ Each record is one synchronous `O_APPEND` write of a newline-terminated line; th
 
 `drill_pr` renders the body from evidence rather than from prose: the verification table is built from `test` and `hygiene` records (command, exit code, log name, commit), the changed-file list comes from `blast` records, and the Review 2 line comes from the `review` record. A body without a red proof says so in a blockquote instead of implying one.
 
-It is then scored by the **existing** PR-craft core (`~/scripts/pr_craft.py lint-desc`, shared with the Kilo and Hermes plugins — one logic core, no drift), and `pr` evidence is recorded **only when the lint reports no blockers**. A blocked body is still written to disk so the author can fix it, while the `pr` gate stays open.
+It is then scored by the **existing** PR-craft core (`core/pr_craft.py lint-desc`, shared with the Kilo and Hermes plugins — one logic core, no drift), and `pr` evidence is recorded **only when the lint reports no blockers**. When the lint could not run at all, the record says so: `recorded without PR-craft lint (…)`, so an unscored body never looks scored. A blocked body is still written to disk so the author can fix it, while the `pr` gate stays open.
 
 ## Cache and expiry
 
@@ -331,7 +334,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 104 tests
+npm test        # node --test test/*.test.js — 106 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts

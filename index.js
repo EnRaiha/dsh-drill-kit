@@ -1042,8 +1042,16 @@ export function apply(ctx, config) {
       mkdirSync(paths.dir, { recursive: true })
       writeFileSync(out, body, 'utf8')
 
+      // An explicit core that is not there is a configuration error, not a reason
+      // to skip the lint: `available: false` reads as "nothing to lint" further
+      // down, so the body would be recorded unlinted and the ledger would not say
+      // so. Refuse instead of silently dropping the check.
+      const explicitCore = config.prCore && config.prCore.length > 0 ? config.prCore : undefined
+      if (config.prLint && explicitCore !== undefined && !existsSync(explicitCore)) {
+        throw new Error(`drill: prCore points at ${explicitCore}, which does not exist — refusing to record a PR body that would skip the lint (unset prCore to use the bundled core)`)
+      }
       const lint = config.prLint
-        ? lintPrBody(body, { core: config.prCore && config.prCore.length > 0 ? config.prCore : undefined, pythonBin: config.pythonBin })
+        ? lintPrBody(body, { core: explicitCore, pythonBin: config.pythonBin })
         : { available: false, ok: null, score: null, verdict: 'lint disabled', blockers: [], good: [], error: null }
       // `available: true` with an `error` means the lint ran and crashed; that is
       // not a clean body, so the `pr` record must not be written on it.
@@ -1059,7 +1067,10 @@ export function apply(ctx, config) {
           bodyPath: out,
           text: args.title,
           ...(head !== null ? { head } : {}),
-          ...(lint.available ? { note: `lint score ${lint.score ?? '?'} — ${lint.verdict}` } : {}),
+          // Say which it was: a scored body, or one recorded with no lint at all.
+          note: lint.available
+            ? `lint score ${lint.score ?? '?'} — ${lint.verdict}`
+            : `recorded without PR-craft lint (${lint.verdict}) — set prLint/prCore to enable it`,
         })
       }
 

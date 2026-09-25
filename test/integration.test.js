@@ -204,6 +204,12 @@ test('drill_diff turns a branch diff into blast evidence with a proposed checkli
 test('drill_review drives the role file and binds the verdict to HEAD', { skip }, async () => {
   const { execFileSync } = await import('node:child_process')
   const { mkdirSync } = await import('node:fs')
+  // Role resolution is project -> user -> bundled. Point the user level at an
+  // empty directory so this test asserts the bundled role on any machine: a
+  // developer who has run drill_setup (or copied the skill into ~/.dsh) would
+  // otherwise get 'user' here and a red suite that says nothing about the code.
+  const savedDshHome = process.env.DSH_HOME
+  process.env.DSH_HOME = join(workspace, 'isolated-dsh-home')
   const repo = join(workspace, 'reviewrepo')
   mkdirSync(repo, { recursive: true })
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
@@ -246,6 +252,8 @@ test('drill_review drives the role file and binds the verdict to HEAD', { skip }
   assert.deepEqual(captured.request.toolFilter.allow, ['read', 'grep', 'glob', 'bash'], 'role tools minus nothing: all are visible')
   assert.match(captured.request.prompt[0].text, new RegExp(head))
   assert.equal(captured.request.outputSchema.properties.verdict.enum.join(','), 'PASS,FAIL')
+  if (savedDshHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = savedDshHome
 
   const ledger = readFileSync(join(repo, '.drill', 'review-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
   const recorded = ledger.find(e => e.kind === 'review')
@@ -878,4 +886,73 @@ test('a cache with only a partial scope snapshot answers, and the record says so
   const entry = ledger.filter(e => e.kind === 'locate').at(-1)
   assert.deepEqual(entry.files, ['src/half.rs:12'], 'the hit is recorded as evidence')
   assert.match(entry.note, /c2g cache schema v3 — partial scope snapshot, callers may be under-reported/, 'and the reader is told the graph is partial')
+})
+
+test('drill_pr refuses a configured core that is not there, and says when it recorded without lint', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'pr-lint-config-repo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+  const ledgerPath = join(repo, '.drill', 'pr-lint-config', 'ledger.jsonl')
+  const ledger = () => readFileSync(ledgerPath, 'utf8').trim().split('\n').map(JSON.parse)
+
+  const mod = await import('../index.js')
+
+  // A `prCore` that does not exist is a configuration error: without this the
+  // lint reports available:false, `clean` turns true, and the body is recorded
+  // as if it had been scored.
+  const broken = fakeContext()
+  mod.apply(broken, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, prLint: true, prCore: join(workspace, 'nope', 'pr_craft.py') }))
+  const brokenExec = { signal: new AbortController().signal, agent: { session: { id: 's-pr-bad-core', header: { cwd: repo } } } }
+  const brokenCall = (name, args) => broken.tools_registered.get(name).execute(args, brokenExec)
+  await brokenCall('drill_start', { task: 'pr-lint-config', repo, base: 'HEAD' })
+  await assert.rejects(
+    () => brokenCall('drill_pr', { task: 'pr-lint-config', title: 'fix(seq): keep the batch ordered' }),
+    /prCore points at .* which does not exist/,
+    'an explicitly configured but missing core must refuse, not record an unlinted body',
+  )
+  assert.equal(existsSync(ledgerPath) && ledger().some(e => e.kind === 'pr'), false, 'no pr record was written')
+
+  // Lint deliberately off: the record has to say the body was never scored.
+  const off = fakeContext()
+  mod.apply(off, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, prLint: false }))
+  const offExec = { signal: new AbortController().signal, agent: { session: { id: 's-pr-nolint', header: { cwd: repo } } } }
+  const offCall = (name, args) => off.tools_registered.get(name).execute(args, offExec)
+  await offCall('drill_start', { task: 'pr-lint-config', repo, base: 'HEAD' })
+  const pr = await offCall('drill_pr', { task: 'pr-lint-config', title: 'fix(seq): keep the batch ordered' })
+  assert.equal(pr.recorded, true)
+  assert.match(ledger().filter(e => e.kind === 'pr').at(-1).note, /recorded without PR-craft lint \(lint disabled\)/)
+})
+
+test('an unconfigured prCore lints with the core that ships in the package', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const { DEFAULT_PR_CORE } = await import('../lib/pr.js')
+  const repo = join(workspace, 'pr-bundled-core-repo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  // No prCore: exactly what a fresh registry install has.
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, prLint: true }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-pr-bundled', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+  await call('drill_start', { task: 'pr-bundled', repo, base: 'HEAD' })
+  const pr = await call('drill_pr', { task: 'pr-bundled', title: 'fix(seq): keep the batch ordered' })
+  assert.equal(pr.lintAvailable, true, `lint ran with ${DEFAULT_PR_CORE}`)
+  assert.ok(typeof pr.lintVerdict === 'string' && pr.lintVerdict.length > 0)
 })

@@ -1,6 +1,6 @@
 # dsh-drill-kit — complete source bundle for review
 
-*Revision: **v0.8.4**, source revision `0b93f9088fea` on branch `master`, tree clean (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
+*Revision: **v0.8.5**, source revision `0b93f9088fea` on branch `master`, tree DIRTY (the revision that last touched the files below, not HEAD — the bundle itself is committed after them). Generated 20260925. Every file below is the exact committed content at that revision; the sha256 in the inventory lets a reviewer confirm the exact bytes.*
 
 **Why this file exists.** A review that only receives `index.js` cannot judge the twelve `lib/*.js` modules the host imports, the nine test files that pin the behaviour, or the skill/role text the reviewer subagent is driven by — that is where the gates, the ledger, the c2g resolver and the audit persona actually live. This bundle carries every tracked file, so a line-by-line review can cover the whole kit, and it records the test run so a read-only reviewer does not have to execute anything.
 
@@ -11,12 +11,12 @@
 | `.github/workflows/publish.yml` | 37 | 1270 | `8392c0bbbcb091b4` | — |
 | `.gitignore` | 4 | 28 | `1adbb37be33001da` | — |
 | `LICENSE` | 22 | 1064 | `2f841f07845b05a9` | — |
-| `README.md` | 357 | 33816 | `a34ec80d94e1c29d` | — |
+| `README.md` | 360 | 34795 | `1417a2846a8bc486` | — |
 | `cordis.patch.yml` | 9 | 300 | `7b935022f8a8569a` | — |
 | `core/README.md` | 39 | 2842 | `63a0a42187d0161a` | — |
 | `core/c2g_tools.py` | 674 | 26464 | `bc13afe99510c89e` | — |
 | `core/pr_craft.py` | 488 | 26669 | `eb02e28af4b86fc5` | — |
-| `docs/README.md` | 28 | 2891 | `29d6f38240a003b9` | — |
+| `docs/README.md` | 28 | 2891 | `7b2a916aed0be638` | — |
 | `frontends/README.md` | 46 | 2336 | `3c88c71470530bd6` | — |
 | `frontends/hermes/c2g/SKILL.md` | 89 | 5510 | `ea3640f117e6a831` | — |
 | `frontends/hermes/c2g/__init__.py` | 31 | 1592 | `4fe73484f698bcf9` | — |
@@ -31,7 +31,7 @@
 | `frontends/kilo/c2g/server.ts` | 234 | 9769 | `21cd0390bce4fd2f` | — |
 | `frontends/kilo/pr-craft/SKILL.md` | 88 | 4226 | `52a78c21b4475ca2` | — |
 | `frontends/kilo/pr-craft/server.ts` | 267 | 11512 | `f430a13745164029` | — |
-| `index.js` | 1598 | 80475 | `466a829fdc44a48c` | — |
+| `index.js` | 1609 | 81283 | `f651f5429257021d` | — |
 | `install.sh` | 264 | 10719 | `d4c518a396110649` | — |
 | `lib/c2g.js` | 350 | 16752 | `e3e32966ff0fc0f2` | — |
 | `lib/cache.js` | 158 | 4455 | `20d40379c8ebd093` | — |
@@ -45,7 +45,7 @@
 | `lib/role.js` | 161 | 6175 | `a598d2bca4a2b564` | — |
 | `lib/runner.js` | 91 | 3367 | `c4c1b3d80baba0e8` | — |
 | `lib/search.js` | 303 | 12658 | `e973f0abbc09846d` | — |
-| `package.json` | 78 | 2084 | `bc8af87e07688bff` | — |
+| `package.json` | 78 | 2084 | `fd83df126795e0fa` | — |
 | `roles/drill-auditor.md` | 55 | 3019 | `107e089732dc1579` | — |
 | `skills/drill/SKILL.md` | 68 | 5524 | `5b4c9a06a6dc254b` | — |
 | `tools/build-source-bundle.mjs` | 98 | 5401 | `7bc478d7e6669192` | — |
@@ -55,23 +55,23 @@
 | `test/embed.test.js` | 112 | 5884 | `f348358148cebd43` | 6 |
 | `test/errors.test.js` | 135 | 7536 | `96e8696dd4f94a23` | 10 |
 | `test/git-role.test.js` | 136 | 6242 | `36f78867e90a4799` | 9 |
-| `test/integration.test.js` | 882 | 49642 | `be244980d46c33a2` | 23 |
+| `test/integration.test.js` | 959 | 54381 | `ec80fbd0e791a8d6` | 25 |
 | `test/pr.test.js` | 97 | 5612 | `13c93f92f822c760` | 7 |
 | `test/search.test.js` | 135 | 6629 | `bf1a0d746a4b8c32` | 11 |
 
-**Totals:** 9783 lines across 50 files; 104 tests declared across 9 test files.
+**Totals:** 9874 lines across 50 files; 106 tests declared across 9 test files.
 
 ## The test run, recorded
 
 ```text
 $ node --test test/*.test.js
-# tests 104
-# pass 104
+# tests 106
+# pass 106
 # fail 0
 $ exit 0
 ```
 
-All 104 pass, 0 fail. The suite needs the host packages reachable from this checkout (`@deepseek-ai/dsh-tools`); when they are not, `integration.test.js` skips itself instead of failing, so a consumer running it standalone sees a smaller count rather than a false red.
+All 106 pass, 0 fail. The suite needs the host packages reachable from this checkout (`@deepseek-ai/dsh-tools`); when they are not, `integration.test.js` skips itself instead of failing, so a consumer running it standalone sees a smaller count rather than a false red.
 
 ---
 
@@ -158,7 +158,7 @@ SOFTWARE.
 
 ## `README.md`
 
-sha256 `a34ec80d94e1c29dfd6a76858ab18a3f62e7133c56b4279cc3d3f4042114d456` · 357 lines
+sha256 `1417a2846a8bc4869ad58cdbb637c99131fc8d0df3a4566dc2486579ceb72deb` · 360 lines
 
 ````markdown
 # The drill kit
@@ -171,7 +171,7 @@ One repository for the whole drill: the DSH plugin that enforces it, the two sha
 
 | Path | What |
 |---|---|
-| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 104 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
+| `index.js`, `lib/`, `test/`, `skills/`, `roles/`, `cordis.patch.yml`, `package.json` | **the DSH plugin** — 16 tools, 106 tests, the gate implementation and the ledger. This is the root package, so the repo itself installs as a plugin. |
 | `core/c2g_tools.py` | the c2g core (stdlib only): `frame`, `error` and the query tools — cache → merged store → binary |
 | `core/pr_craft.py` | the PR-craft core (stdlib only): `lint-desc`, `lint-comment`, `lint-diff`, `plan`, `checklist` |
 | `frontends/kilo/`, `frontends/hermes/` | thin frontends that expose the two cores as plugins in those runtimes |
@@ -189,6 +189,8 @@ One repository for the whole drill: the DSH plugin that enforces it, the two sha
 ./install.sh --profile web --uninstall
 
 curl -fsSL https://raw.githubusercontent.com/EnRaiha/dsh-drill-kit/master/install.sh \
+  | bash -s -- --profile web --dry-run      # prints every action, writes nothing
+curl -fsSL https://raw.githubusercontent.com/EnRaiha/dsh-drill-kit/master/install.sh \
   | bash -s -- --profile web --link
 ```
 
@@ -200,10 +202,10 @@ Flags: `--profile <name>` (default `web`), `--dsh <checkout|bin.js>`, `--link`, 
 dsh plugin --profile <profile> add dsh-drill              # from npm
 dsh plugin --profile <profile> add dsh-drill@0.8.4        # pinned
 dsh plugin --profile <profile> add /path/to/dsh-drill-kit # local checkout
-dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.4
+dsh plugin --profile <profile> add github:EnRaiha/dsh-drill-kit#v0.8.5
 ```
 
-The plugin imports three host modules (`@deepseek-ai/dsh-tools`, `dsh-llm`, `schemastery`). They are reachable through the profile the plugin loads into, so the first two are declared **optional** peers — a missing host fails loudly at import — and `schemastery`, a runtime validator rather than a host service, ships as a regular dependency.
+The plugin imports host modules that the DSH runtime provides (`@deepseek-ai/dsh-tools`, `dsh-llm`, `dsh-subagent`). All three are declared as **optional** peers: the host supplies them through the profile's own resolution, a missing host still fails loudly at import, and a fresh install stays quiet instead of printing `missing peer` for packages the user must not install. `@deepseek-ai/schemastery` is different — a runtime validator, not a host service — so it ships as a regular `dependencies` entry.
 
 Or by hand:
 
@@ -219,7 +221,7 @@ The plugin row is declared in `cordis.patch.yml` (`dsh.bundle.patch` in `package
 ## Run the tests
 
 ```sh
-node --test test/*.test.js           # 104 tests, 0 failures
+node --test test/*.test.js           # 106 tests, 0 failures
 node tools/build-source-bundle.mjs   # refresh docs/DRILL-PLUGIN-SOURCE-BUNDLE-*.md
 ```
 
@@ -251,7 +253,7 @@ What is *this* repository's own work: the gate implementation and ledger (`index
 
 ## Status
 
-`dsh-drill` **v0.8.4** · 16 tools · 104 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
+`dsh-drill` **v0.8.5** · 16 tools · 106 tests · loads on DSH `0.1.6-alpha.2`. Two reviews are recorded in the docs; every defect they found is fixed with a regression test, and the ones that could not be settled are listed as unverified rather than assumed.
 
 ## Licence
 
@@ -311,7 +313,7 @@ The plugin also registers one `agent/turn-stopping` listener: while an active ta
 
 ```sh
 # from this checkout (dev): link into a profile, then boot
-dsh plugin --profile <profile> add ~/projects/dsh-drill
+dsh plugin --profile <profile> add ~/projects/dsh-drill-kit
 node apps/cli/lib/cli.js <profile> --dump-config | grep -A2 'id: drill'
 ```
 
@@ -344,8 +346,9 @@ Every key has a schema default; override by re-stating the row's whole config in
 | `maxReviewToolCalls` | `40` | Fallback budget when the role sets none; `0` disables the cap. A role's own `maxToolCalls` always wins, including `0` — v0.8.1 fixed a case where a role saying `0` was silently overridden by this fallback. Exceeding the budget aborts the child and records FAIL. |
 | `runTimeoutMs` | `900000` | Default timeout for `drill_run`. |
 | `errorMaxResolve` | `12` | Cap on frames `drill_error` resolves against the graph. |
+| `requireLog` | `true` | Refuse a `test`/`hygiene` record whose log is missing, unreadable, or outside the task's own `logs/` directory. Set `false` to accept a log path from elsewhere — the ledger then records the hash without checking where it came from. |
 | `prLint` | `true` | Score the rendered PR body with the PR-craft core before recording it. |
-| `prCore` | `~/scripts/pr_craft.py` | Path to the shared PR-craft core (Kilo and Hermes use the same file). |
+| `prCore` | `''` (auto) | Explicit path to the PR-craft core. Left empty, the plugin resolves `PR_CRAFT_CORE`, then the copy that ships with the package (`core/pr_craft.py`), then `~/scripts/pr_craft.py` — so a fresh install lints without configuring anything. A non-empty value that does not exist is refused by `drill_pr` rather than recorded unlinted. |
 | `pythonBin` | `python3` | Interpreter used to call the PR-craft core. |
 | `c2gEnabled` | `true` | Enable the code2graph-backed stage 1–2 tools. |
 | `c2gCacheDir` | `~/.cache/code2graph/projects` | c2g cache root. |
@@ -450,7 +453,7 @@ Each record is one synchronous `O_APPEND` write of a newline-terminated line; th
 
 `drill_pr` renders the body from evidence rather than from prose: the verification table is built from `test` and `hygiene` records (command, exit code, log name, commit), the changed-file list comes from `blast` records, and the Review 2 line comes from the `review` record. A body without a red proof says so in a blockquote instead of implying one.
 
-It is then scored by the **existing** PR-craft core (`~/scripts/pr_craft.py lint-desc`, shared with the Kilo and Hermes plugins — one logic core, no drift), and `pr` evidence is recorded **only when the lint reports no blockers**. A blocked body is still written to disk so the author can fix it, while the `pr` gate stays open.
+It is then scored by the **existing** PR-craft core (`core/pr_craft.py lint-desc`, shared with the Kilo and Hermes plugins — one logic core, no drift), and `pr` evidence is recorded **only when the lint reports no blockers**. When the lint could not run at all, the record says so: `recorded without PR-craft lint (…)`, so an unscored body never looks scored. A blocked body is still written to disk so the author can fix it, while the `pr` gate stays open.
 
 ## Cache and expiry
 
@@ -494,7 +497,7 @@ The fallback never pretends to be a graph: `drill_locate` searches for definitio
 ## Verification
 
 ```sh
-npm test        # node --test test/*.test.js — 104 tests
+npm test        # node --test test/*.test.js — 106 tests
 ```
 
 - unit: task-id safety, entry validation, log hashing, gate logic (including commit binding), report rendering, runner exit codes/timeouts
@@ -1755,7 +1758,7 @@ if __name__ == "__main__":
 
 ## `docs/README.md`
 
-sha256 `29d6f38240a003b9251cc2b4ff6b28d9db76f3b984953c06930dd22c7f0d4af9` · 28 lines
+sha256 `7b2a916aed0be6387d4cb49daf3bb9b7270ca26085a19222cb2107301d952819` · 28 lines
 
 ````markdown
 # Docs
@@ -1764,7 +1767,7 @@ Everything the drill work produced, in reading order.
 
 | Document | What it is | Status |
 |---|---|---|
-| [`DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`](DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md) | **The canonical specification.** What the drill is, why it exists, the ledger data model, the three c2g resolution layers, the 16-tool reference implementation, the operating guide, both reviews (§7) and the risk register (§8), plus Appendices A–D. | current (v0.8.4, 104 tests) |
+| [`DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md`](DRILL-BUG-AND-PLUGIN-FULL-DOC-20260925.md) | **The canonical specification.** What the drill is, why it exists, the ledger data model, the three c2g resolution layers, the 16-tool reference implementation, the operating guide, both reviews (§7) and the risk register (§8), plus Appendices A–D. | current (v0.8.5, 106 tests) |
 | [`DRILL-PLUGIN-SOURCE-BUNDLE-20260925.md`](DRILL-PLUGIN-SOURCE-BUNDLE-20260925.md) | **Generated snapshot for reviewers.** All 29 tracked files inline, with per-file `sha256` + line counts, the declared test count per file, and the recorded `node --test` run. Regenerate with `node tools/build-source-bundle.mjs`. | generated at the commit in its header |
 | [`DRILL-E2E-REVIEW-20260925.md`](DRILL-E2E-REVIEW-20260925.md) | The first end-to-end review as a standalone record: method, the seven defects it found (gate binding, unbound `cwd`-style holes, rule-8 misses, mislabelled diffs), what was verified true, what stayed unverified. | historical — its content is §7 of the full doc |
 | [`DRILL-BUG-FULL-DOC-20260925.md`](DRILL-BUG-FULL-DOC-20260925.md) | The specification as it stood at **v0.8.0**, before the second review. | historical |
@@ -3494,7 +3497,7 @@ export default PrCraftPlugin
 
 ## `index.js`
 
-sha256 `466a829fdc44a48c6f68fb1499b0a9e260560735dfdf439b312b8ef5234ed7a9` · 1598 lines
+sha256 `f651f5429257021de6bd8183204b699feca70a341129bb4863c53d941bd93981` · 1609 lines
 
 ````javascript
 /**
@@ -4541,8 +4544,16 @@ export function apply(ctx, config) {
       mkdirSync(paths.dir, { recursive: true })
       writeFileSync(out, body, 'utf8')
 
+      // An explicit core that is not there is a configuration error, not a reason
+      // to skip the lint: `available: false` reads as "nothing to lint" further
+      // down, so the body would be recorded unlinted and the ledger would not say
+      // so. Refuse instead of silently dropping the check.
+      const explicitCore = config.prCore && config.prCore.length > 0 ? config.prCore : undefined
+      if (config.prLint && explicitCore !== undefined && !existsSync(explicitCore)) {
+        throw new Error(`drill: prCore points at ${explicitCore}, which does not exist — refusing to record a PR body that would skip the lint (unset prCore to use the bundled core)`)
+      }
       const lint = config.prLint
-        ? lintPrBody(body, { core: config.prCore && config.prCore.length > 0 ? config.prCore : undefined, pythonBin: config.pythonBin })
+        ? lintPrBody(body, { core: explicitCore, pythonBin: config.pythonBin })
         : { available: false, ok: null, score: null, verdict: 'lint disabled', blockers: [], good: [], error: null }
       // `available: true` with an `error` means the lint ran and crashed; that is
       // not a clean body, so the `pr` record must not be written on it.
@@ -4558,7 +4569,10 @@ export function apply(ctx, config) {
           bodyPath: out,
           text: args.title,
           ...(head !== null ? { head } : {}),
-          ...(lint.available ? { note: `lint score ${lint.score ?? '?'} — ${lint.verdict}` } : {}),
+          // Say which it was: a scored body, or one recorded with no lint at all.
+          note: lint.available
+            ? `lint score ${lint.score ?? '?'} — ${lint.verdict}`
+            : `recorded without PR-craft lint (${lint.verdict}) — set prLint/prCore to enable it`,
         })
       }
 
@@ -7640,12 +7654,12 @@ export function definitionPattern(symbol, language = 'rust') {
 
 ## `package.json`
 
-sha256 `bc8af87e07688bffaedfac8363e87d3e55c0375a200a372a68f152441fb5aa12` · 78 lines
+sha256 `fd83df126795e0fac99d15093d90270a1f224ba13c6831bf6b461750e9322f98` · 78 lines
 
 ````json
 {
   "name": "dsh-drill",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "description": "Evidence-gated bug-fix drill for DeepSeek Harness: failure signal to symbols, stage gates that a negative lookup cannot satisfy, plugin-run red/green proofs bound to a commit, c2g localization with a tgrep fallback, and a PR body rendered from the ledger.",
   "type": "module",
   "main": "./index.js",
@@ -9028,7 +9042,7 @@ test('roleBudget reports only a real non-negative integer cap', () => {
 
 ## `test/integration.test.js`
 
-sha256 `be244980d46c33a2681bc041a21409fd1a0259df3163f7c91936d4054a3157ae` · 882 lines
+sha256 `ec80fbd0e791a8d6962b879fb74191b633ed89fad76df53b643e9346294265b8` · 959 lines
 
 ````javascript
 /**
@@ -9237,6 +9251,12 @@ test('drill_diff turns a branch diff into blast evidence with a proposed checkli
 test('drill_review drives the role file and binds the verdict to HEAD', { skip }, async () => {
   const { execFileSync } = await import('node:child_process')
   const { mkdirSync } = await import('node:fs')
+  // Role resolution is project -> user -> bundled. Point the user level at an
+  // empty directory so this test asserts the bundled role on any machine: a
+  // developer who has run drill_setup (or copied the skill into ~/.dsh) would
+  // otherwise get 'user' here and a red suite that says nothing about the code.
+  const savedDshHome = process.env.DSH_HOME
+  process.env.DSH_HOME = join(workspace, 'isolated-dsh-home')
   const repo = join(workspace, 'reviewrepo')
   mkdirSync(repo, { recursive: true })
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
@@ -9279,6 +9299,8 @@ test('drill_review drives the role file and binds the verdict to HEAD', { skip }
   assert.deepEqual(captured.request.toolFilter.allow, ['read', 'grep', 'glob', 'bash'], 'role tools minus nothing: all are visible')
   assert.match(captured.request.prompt[0].text, new RegExp(head))
   assert.equal(captured.request.outputSchema.properties.verdict.enum.join(','), 'PASS,FAIL')
+  if (savedDshHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = savedDshHome
 
   const ledger = readFileSync(join(repo, '.drill', 'review-drill', 'ledger.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
   const recorded = ledger.find(e => e.kind === 'review')
@@ -9911,6 +9933,75 @@ test('a cache with only a partial scope snapshot answers, and the record says so
   const entry = ledger.filter(e => e.kind === 'locate').at(-1)
   assert.deepEqual(entry.files, ['src/half.rs:12'], 'the hit is recorded as evidence')
   assert.match(entry.note, /c2g cache schema v3 — partial scope snapshot, callers may be under-reported/, 'and the reader is told the graph is partial')
+})
+
+test('drill_pr refuses a configured core that is not there, and says when it recorded without lint', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const repo = join(workspace, 'pr-lint-config-repo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+  const ledgerPath = join(repo, '.drill', 'pr-lint-config', 'ledger.jsonl')
+  const ledger = () => readFileSync(ledgerPath, 'utf8').trim().split('\n').map(JSON.parse)
+
+  const mod = await import('../index.js')
+
+  // A `prCore` that does not exist is a configuration error: without this the
+  // lint reports available:false, `clean` turns true, and the body is recorded
+  // as if it had been scored.
+  const broken = fakeContext()
+  mod.apply(broken, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, prLint: true, prCore: join(workspace, 'nope', 'pr_craft.py') }))
+  const brokenExec = { signal: new AbortController().signal, agent: { session: { id: 's-pr-bad-core', header: { cwd: repo } } } }
+  const brokenCall = (name, args) => broken.tools_registered.get(name).execute(args, brokenExec)
+  await brokenCall('drill_start', { task: 'pr-lint-config', repo, base: 'HEAD' })
+  await assert.rejects(
+    () => brokenCall('drill_pr', { task: 'pr-lint-config', title: 'fix(seq): keep the batch ordered' }),
+    /prCore points at .* which does not exist/,
+    'an explicitly configured but missing core must refuse, not record an unlinted body',
+  )
+  assert.equal(existsSync(ledgerPath) && ledger().some(e => e.kind === 'pr'), false, 'no pr record was written')
+
+  // Lint deliberately off: the record has to say the body was never scored.
+  const off = fakeContext()
+  mod.apply(off, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, prLint: false }))
+  const offExec = { signal: new AbortController().signal, agent: { session: { id: 's-pr-nolint', header: { cwd: repo } } } }
+  const offCall = (name, args) => off.tools_registered.get(name).execute(args, offExec)
+  await offCall('drill_start', { task: 'pr-lint-config', repo, base: 'HEAD' })
+  const pr = await offCall('drill_pr', { task: 'pr-lint-config', title: 'fix(seq): keep the batch ordered' })
+  assert.equal(pr.recorded, true)
+  assert.match(ledger().filter(e => e.kind === 'pr').at(-1).note, /recorded without PR-craft lint \(lint disabled\)/)
+})
+
+test('an unconfigured prCore lints with the core that ships in the package', { skip }, async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { mkdirSync } = await import('node:fs')
+  const { DEFAULT_PR_CORE } = await import('../lib/pr.js')
+  const repo = join(workspace, 'pr-bundled-core-repo')
+  mkdirSync(repo, { recursive: true })
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'drill@test')
+  git('config', 'user.name', 'drill test')
+  writeFileSync(join(repo, 'a.rs'), 'fn a() {}\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'base')
+
+  const mod = await import('../index.js')
+  const ctx = fakeContext()
+  // No prCore: exactly what a fresh registry install has.
+  mod.apply(ctx, mod.Config({ reminder: false, cacheDir: join(workspace, 'cache'), embedEnabled: false, prLint: true }))
+  const exec = { signal: new AbortController().signal, agent: { session: { id: 's-pr-bundled', header: { cwd: repo } } } }
+  const call = (name, args) => ctx.tools_registered.get(name).execute(args, exec)
+  await call('drill_start', { task: 'pr-bundled', repo, base: 'HEAD' })
+  const pr = await call('drill_pr', { task: 'pr-bundled', title: 'fix(seq): keep the batch ordered' })
+  assert.equal(pr.lintAvailable, true, `lint ran with ${DEFAULT_PR_CORE}`)
+  assert.ok(typeof pr.lintVerdict === 'string' && pr.lintVerdict.length > 0)
 })
 ````
 
